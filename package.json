@@ -1,0 +1,11 @@
+{
+  "name": "mi-control-financiero",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cd app && npm run dev",
+    "build": "cd app && npm run build",
+    "preview": "cd app && npm run preview"
+  }
+}

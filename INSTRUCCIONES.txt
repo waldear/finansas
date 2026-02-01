@@ -1,0 +1,120 @@
+🚀 MI CONTROL FINANCIERO - CONFIGURACIÓN COMPLETA
+===================================================
+
+✅ TODO CONFIGURADO Y LISTO PARA USAR
+-------------------------------------
+✅ Supabase: https://xtalkkbvyylwywzzafcc.supabase.co
+✅ Gemini AI: API key configurada
+✅ Sincronización en la nube: Activada
+✅ Asistente IA: Gemini real (no modo local)
+
+📁 ESTRUCTURA DEL PROYECTO
+---------------------------
+/app          → Aplicación React
+/backend      → Backend (si existe)
+
+⚡ INICIAR RÁPIDO
+----------------
+1. Abrir terminal en la carpeta "app"
+2. Ejecutar: npm install
+3. Ejecutar: npm run dev
+4. Abrir: http://localhost:5173
+
+⚠️ IMPORTANTE: Crear las tablas en Supabase
+--------------------------------------------
+Para que la sincronización funcione, necesitás crear las tablas:
+
+1. Ir a https://supabase.com/dashboard/project/xtalkkbvyylwywzzafcc
+2. Click en "SQL Editor" (en el menú lateral)
+3. Click en "New query"
+4. Abrir el archivo "supabase-schema.sql" de este proyecto
+5. Copiar el contenido y pegarlo en el editor
+6. Click en "Run" para ejecutar
+
+Las tablas que se crearán:
+- transactions (transacciones)
+- debts (deudas)
+- custom_categories (categorías personalizadas)
+- savings_goals (metas de ahorro)
+
+🤖 GEMINI AI - CONFIGURADO ✓
+------------------------------
+✅ Tu API key ya está configurada en .env.local
+✅ El asistente usará IA real de Google
+✅ Respuestas inteligentes y contextuales
+
+Para verificar que funciona:
+1. Iniciar la app
+2. Ir a pestaña "Asistente"
+3. Debería mostrar "Asistente con Gemini AI" con estrella amarilla
+4. Hacer una pregunta y recibir respuesta inteligente
+
+🆕 FUNCIONES COMPLETAS
+-----------------------
+✅ Dashboard con resumen financiero
+✅ Exportar datos (JSON/CSV/Excel)
+✅ Filtros por fecha en transacciones
+✅ Editar transacciones inline
+✅ Modo oscuro/claro/sistema
+✅ Gráficos con datos reales
+✅ Autenticación (login/registro)
+✅ Sincronización automática en la nube
+✅ Categorías personalizables
+✅ Metas de ahorro con seguimiento
+✅ Análisis de PDF de tarjetas
+✅ Asistente IA con Gemini real
+
+☁️ SINCRONIZACIÓN EN LA NUBE
+-----------------------------
+- Automática cada 2 segundos después de cambios
+- Icono de nube en el header muestra estado:
+  ☁️ Verde = Sincronizado
+  ☁️ Amarillo = Pendiente
+  🔄 Girando = Sincronizando
+- Click en el icono para sincronización manual
+
+📱 USO BÁSICO
+--------------
+1. Crear cuenta o iniciar sesión
+2. Explorar el dashboard
+3. Agregar transacciones, deudas, metas
+4. Todo se sincroniza automáticamente
+5. Usar el asistente IA para consultas inteligentes
+
+🤖 ASISTENTE IA CON GEMINI
+---------------------------
+Ahora podés preguntarle cosas como:
+- "¿Cómo puedo reducir mis gastos este mes?"
+- "¿Cuánto debería ahorrar para jubilación?"
+- "Analizá mis gastos y dame consejos"
+- "¿Qué estrategia me recomendás para mis deudas?"
+
+El asistente analiza tus datos reales y da respuestas personalizadas.
+
+💡 TIPS
+-------
+- Los datos se guardan localmente y en la nube
+- Podés usar la app offline, se sincroniza al reconectar
+- El modo oscuro se adapta a tu sistema
+- Las metas de ahorro descontarán de tu balance disponible
+- El asistente Gemini tiene límites de uso gratuito (generoso)
+
+🚀 DEPLOY
+---------
+Para deployar en Vercel/Netlify:
+1. npm run build
+2. Subir la carpeta "dist"
+3. Configurar variables de entorno en el hosting:
+   - VITE_SUPABASE_URL=https://xtalkkbvyylwywzzafcc.supabase.co
+   - VITE_SUPABASE_ANON_KEY=sb_publishable_WR7AC0_eJkA-SpSC6ua8kA_RQytXduZ
+   - VITE_GEMINI_API_KEY=AIzaSyAikwJNXtQNpcEBgz7-80T2ruY9hjQ_Ew4
+
+🐛 SI HAY ERRORES
+------------------
+1. Verificar que las tablas estén creadas en Supabase
+2. Borrar node_modules y package-lock.json
+3. npm install
+4. npm run dev
+
+✨ ¡TODO LISTO PARA USAR!
+==========================
