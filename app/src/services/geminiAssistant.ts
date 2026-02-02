@@ -26,11 +26,11 @@ export function isGeminiAvailable(): boolean {
 // Obtener o crear instancia de Gemini
 function getGenAI(): GoogleGenerativeAI | null {
   const apiKey = getAPIKey();
-  
+
   if (!apiKey || apiKey.length <= 10) {
     return null;
   }
-  
+
   // Si cambió la API key o no hay instancia, crear nueva
   if (apiKey !== cachedAPIKey || !genAI) {
     try {
@@ -42,7 +42,7 @@ function getGenAI(): GoogleGenerativeAI | null {
       return null;
     }
   }
-  
+
   return genAI;
 }
 
@@ -57,7 +57,7 @@ export async function generateGeminiResponse(
 ): Promise<string> {
   // Obtener instancia de Gemini
   const genAI = getGenAI();
-  
+
   // Si Gemini no está disponible, usar respuesta local
   if (!genAI) {
     console.log('Gemini no configurado, usando respuesta local');
@@ -69,13 +69,13 @@ export async function generateGeminiResponse(
 
     // Preparar contexto financiero
     const { debts, transactions, summary } = context;
-    
+
     const recentTransactions = transactions
       .slice(0, 10)
       .map(t => `${t.date}: ${t.type === 'income' ? '+' : '-'}$${t.amount} - ${t.description} (${t.category})`)
       .join('\n');
 
-    const debtsInfo = debts.map(d => 
+    const debtsInfo = debts.map(d =>
       `- ${d.name}: $${d.totalAmount} total, $${d.monthlyPayment}/mes, ${d.remainingInstallments} cuotas restantes`
     ).join('\n');
 
@@ -116,16 +116,16 @@ Responde como si estuvieras conversando con un amigo que quiere mejorar sus fina
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-    
+
     return text || 'Lo siento, no pude generar una respuesta. Intenta de nuevo.';
   } catch (error: any) {
     console.error('Error con Gemini:', error);
-    
+
     // Si hay error con Gemini, usar respuesta local como fallback
     if (error.message?.includes('API key') || error.message?.includes('permission')) {
       return '⚠️ Error con la API key de Gemini. Por favor, verifica que tu VITE_GEMINI_API_KEY sea correcta en el archivo .env.local';
     }
-    
+
     return generateLocalResponse(userMessage, context);
   }
 }
@@ -159,7 +159,7 @@ Puedo ayudarte con:
   if (lowerMessage.includes('debo') || lowerMessage.includes('deuda') || lowerMessage.includes('debo en total')) {
     const totalDebt = debts.reduce((sum, d) => sum + d.totalAmount, 0);
     const monthlyPayments = debts.reduce((sum, d) => sum + d.monthlyPayment, 0);
-    
+
     if (debts.length === 0) {
       return '🎉 ¡Excelente! No tienes deudas registradas. Sigue así manteniendo tus finanzas saludables.';
     }
@@ -168,7 +168,7 @@ Puedo ayudarte con:
     response += `• Total adeudado: **$${totalDebt.toLocaleString('es-AR')}**\n`;
     response += `• Pago mensual total: **$${monthlyPayments.toLocaleString('es-AR')}**\n`;
     response += `• Tarjetas activas: **${debts.length}**\n\n`;
-    
+
     response += `**Detalle por tarjeta:**\n`;
     debts.forEach(debt => {
       const remaining = debt.monthlyPayment * debt.remainingInstallments;
@@ -195,7 +195,7 @@ Puedo ayudarte con:
         return { name: debt.name, daysUntil, amount: debt.monthlyPayment, dueDate };
       })
       .sort((a, b) => a.daysUntil - b.daysUntil);
-    
+
     if (reminders.length === 0) {
       return '🎉 No tienes vencimientos próximos. ¡Qué alivio!';
     }
@@ -239,7 +239,7 @@ ${debts.filter(d => d.name.toLowerCase().includes('naranja')).length > 0 ? '• 
   // Naranja específica
   if (lowerMessage.includes('naranja') || lowerMessage.includes('plan z')) {
     const naranjaDebt = debts.find(d => d.name.toLowerCase().includes('naranja'));
-    
+
     if (!naranjaDebt) {
       return `ℹ️ No tengo registrada una deuda con Tarjeta Naranja.
 
@@ -280,18 +280,18 @@ ${summary.debtToIncomeRatio > 30 ? '⚠️ Tus deudas consumen más del 30% de t
   if (lowerMessage.includes('próximo mes') || lowerMessage.includes('proximo mes') || lowerMessage.includes('predicción') || lowerMessage.includes('prediccion')) {
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    
+
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    
-    const recentExpenses = context.transactions.filter((t: Transaction) => 
+
+    const recentExpenses = context.transactions.filter((t: Transaction) =>
       t.type === 'expense' && new Date(t.date) >= threeMonthsAgo
     );
-    
+
     const avgMonthlyExpense = recentExpenses.length > 0
       ? recentExpenses.reduce((sum: number, t: Transaction) => sum + t.amount, 0) / 3
       : summary.totalExpenses;
-    
+
     const monthlyDebtPayments = debts.reduce((sum: number, d: Debt) => sum + d.monthlyPayment, 0);
     const predictedExpenses = avgMonthlyExpense + monthlyDebtPayments;
     const predictedBalance = summary.totalIncome - predictedExpenses;
@@ -348,11 +348,17 @@ export async function analyzePDFWithGemini(file: File): Promise<{
   if (genAI) {
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      
-      // Leer el archivo como base64 para enviarlo a Gemini
+
+      // Leer el archivo como base64 de forma segura (evitando stack overflow en archivos grandes)
       const arrayBuffer = await file.arrayBuffer();
-      const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Data = btoa(binary);
+
       const result = await model.generateContent([
         {
           inlineData: {
@@ -361,37 +367,54 @@ export async function analyzePDFWithGemini(file: File): Promise<{
           },
         },
         {
-          text: `Analiza este resumen de tarjeta de crédito y extrae:
-1. Nombre de la tarjeta (Naranja, Visa, Mastercard, etc.)
-2. Saldo total actual
-3. Pago mínimo
-4. Fecha de vencimiento
-5. Lista de transacciones (descripción y monto)
+          text: `Analiza este resumen de tarjeta de crédito (típico de Argentina/Latam).
+          
+          OBJETIVO: Extraer datos financieros exactos para JSON.
 
-Responde SOLO en formato JSON así:
-{
-  "cardName": "Nombre",
-  "totalBalance": 150000,
-  "minimumPayment": 15000,
-  "dueDate": "2025-03-15",
-  "transactions": [{"description": "Supermercado", "amount": 25000}]
-}`,
+          REGLAS DE MONEDA:
+          - En este documento, $ 10.000,00 significa diez mil. (Punto = miles, Coma = decimales).
+          - Para el JSON, conviértelo a formato numérico estándar (punto = decimales, sin separador de miles). 
+          - Ejemplo: "$ 1.500,50" -> 1500.50
+          - Ejemplo: "12000" -> 12000
+
+          BUSCA ESTOS CAMPOS:
+          1. Nombre de la tarjeta (Visa, Mastercard, Naranja, Cabal, etc.).
+          2. Saldo TOTAL a pagar (Busca: "Saldo Actual", "Pago Total", "Total a Pagar", "Importe a Pagar", "Saldo del Periodo"). NO confundir con "Pago Mínimo" a menos que sea el único valor.
+          3. Pago Mínimo (Busca: "Pago Mínimo", "Mínimo a Pagar").
+          4. Fecha de vencimiento (Formato YYYY-MM-DD).
+          5. Transacciones (máximo las 10 más relevantes/recientes).
+
+          Responde SOLO en formato JSON válido:
+          {
+            "cardName": "Nombre Detectado",
+            "totalBalance": 0.00,
+            "minimumPayment": 0.00,
+            "dueDate": "YYYY-MM-DD",
+            "transactions": [{"description": "Compra Ejemplo", "amount": 0.00}]
+          }
+          `,
         },
       ]);
 
       const response = await result.response;
       const text = response.text();
-      
-      // Extraer JSON de la respuesta
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+
+      console.log('Gemini Raw Response:', text); // Para debugging en consola del usuario
+
+      // Extraer JSON de la respuesta (buscando el primer { y el último })
+      const jsonStartIndex = text.indexOf('{');
+      const jsonEndIndex = text.lastIndexOf('}') + 1;
+
+      if (jsonStartIndex >= 0 && jsonEndIndex > jsonStartIndex) {
+        const jsonString = text.substring(jsonStartIndex, jsonEndIndex);
+        const parsed = JSON.parse(jsonString);
+
         return {
           cardName: parsed.cardName || 'Tarjeta de Crédito',
-          totalBalance: parsed.totalBalance || 0,
-          minimumPayment: parsed.minimumPayment || 0,
+          totalBalance: typeof parsed.totalBalance === 'number' ? parsed.totalBalance : parseFloat(parsed.totalBalance) || 0,
+          minimumPayment: typeof parsed.minimumPayment === 'number' ? parsed.minimumPayment : parseFloat(parsed.minimumPayment) || 0,
           dueDate: parsed.dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          transactions: parsed.transactions || [],
+          transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         };
       }
     } catch (error) {
@@ -414,19 +437,19 @@ async function analyzePDFFallback(file: File): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
+
     reader.onload = () => {
       try {
         const fileName = file.name.toLowerCase();
         let cardName = 'Tarjeta de Crédito';
-        
+
         if (fileName.includes('naranja')) cardName = 'Tarjeta Naranja';
         else if (fileName.includes('visa')) cardName = 'Visa';
         else if (fileName.includes('master')) cardName = 'Mastercard';
         else if (fileName.includes('nativa')) cardName = 'Tarjeta Nativa';
         else if (fileName.includes('mercado')) cardName = 'Mercado Pago';
         else if (fileName.includes('cabal')) cardName = 'Tarjeta Cabal';
-        
+
         const result = {
           cardName,
           totalBalance: 0,
@@ -434,28 +457,28 @@ async function analyzePDFFallback(file: File): Promise<{
           dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           transactions: [] as { description: string; amount: number }[],
         };
-        
+
         // Intentar extraer números del contenido
         const content = reader.result as string;
         const numbers = content.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
-        
+
         if (numbers && numbers.length > 0) {
-          const parsedNumbers = numbers.map(n => 
+          const parsedNumbers = numbers.map(n =>
             parseFloat(n.replace(/\./g, '').replace(',', '.'))
           ).filter(n => !isNaN(n) && n > 0);
-          
+
           if (parsedNumbers.length > 0) {
             result.totalBalance = Math.max(...parsedNumbers);
             result.minimumPayment = Math.round(result.totalBalance * 0.1);
           }
         }
-        
+
         resolve(result);
       } catch (error) {
         reject(new Error('Error al leer el PDF'));
       }
     };
-    
+
     reader.onerror = () => reject(new Error('Error al leer el archivo'));
     reader.readAsText(file);
   });
@@ -471,7 +494,7 @@ export async function generateFinancialAdvice(
   if (genAI) {
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      
+
       const prompt = `Basándote en estos datos financieros, genera 3 consejos cortos y accionables:
 
 DATOS:
@@ -487,7 +510,7 @@ Responde solo con los 3 consejos, uno por línea, empezando con emoji.`;
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-      
+
       return text.split('\n').filter(line => line.trim().length > 0).slice(0, 3);
     } catch (error) {
       console.error('Error generando consejos con Gemini:', error);
@@ -496,7 +519,7 @@ Responde solo con los 3 consejos, uno por línea, empezando con emoji.`;
 
   // Fallback local
   const advice: string[] = [];
-  
+
   if (summary.savingsRate >= 20) {
     advice.push('✅ ¡Excelente! Estás ahorrando más del 20%. Mantené este hábito.');
   } else if (summary.savingsRate >= 10) {
@@ -504,7 +527,7 @@ Responde solo con los 3 consejos, uno por línea, empezando con emoji.`;
   } else {
     advice.push('💰 Intentá ahorrar al menos el 10% de tus ingresos.');
   }
-  
+
   const debtRatio = summary.debtToIncomeRatio;
   if (debtRatio > 40) {
     advice.push('🚨 Tus deudas superan el 40% de tus ingresos. Priorizá pagarlas urgentemente.');
@@ -513,11 +536,11 @@ Responde solo con los 3 consejos, uno por línea, empezando con emoji.`;
   } else {
     advice.push('✅ Tus deudas están bajo control. Seguí así.');
   }
-  
+
   const naranja = debts.find(d => d.name.toLowerCase().includes('naranja'));
   if (naranja) {
     advice.push('💳 Para Naranja: usá el Plan Z 3 sin interés cuando puedas.');
   }
-  
+
   return advice.slice(0, 3);
 }
