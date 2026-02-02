@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,27 +33,41 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
     setCategory('');
   }, [activeTab]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  /* 
+   * DEBUG MODE: Logic changed to catch mobile errors
+   */
+  const handleManualSubmit = (e: React.MouseEvent | React.TouchEvent) => {
+    // Stop any form events
     e.preventDefault();
+    e.stopPropagation();
+
+    // 1. debug alert
+    // alert('Procesando click...'); 
 
     if (!amount || !description || !category) {
-      toast.error('Por favor completa todos los campos');
+      alert('Error: Faltan completar campos.\n\nAsegurate de tener:\n- Monto\n- Descripción\n- Categoría');
       return;
     }
 
-    onAddTransaction({
-      type: activeTab,
-      amount: parseFloat(amount),
-      description,
-      category,
-      date,
-    });
+    try {
+      onAddTransaction({
+        type: activeTab,
+        amount: parseFloat(amount),
+        description,
+        category,
+        date,
+      });
 
-    // Reset form but keep date
-    setAmount('');
-    setDescription('');
-    setCategory('');
-    toast.success(`${activeTab === 'income' ? 'Ingreso' : 'Gasto'} agregado correctamente`);
+      // Reset form
+      setAmount('');
+      setDescription('');
+      setCategory('');
+
+      // Force feedback
+      alert('¡Listo! Agregado correctamente.');
+    } catch (err) {
+      alert('Error interno: ' + err);
+    }
   };
 
   const defaultCategories = activeTab === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
@@ -78,7 +92,7 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
           </TabsList>
 
           <TabsContent value={activeTab}>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            <div className="space-y-4 mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Monto</Label>
@@ -166,15 +180,10 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
               </div>
 
               <Button
-                type="submit"
+                type="button"
                 className="w-full"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
-                onTouchEnd={() => {
-                  // Prevent ghost clicks on some mobile devices
-                  // e.preventDefault(); 
-                  // Don't prevent default here as it might block form submission
-                  // This is just to ensure touchend triggers focus out/submission if needed
-                }}
+                onClick={handleManualSubmit}
               >
                 {activeTab === 'expense' ? (
                   <>
@@ -188,7 +197,7 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                   </>
                 )}
               </Button>
-            </form>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>
