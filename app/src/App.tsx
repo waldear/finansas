@@ -212,7 +212,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-center" richColors closeButton mobileOffset={{ top: 10, right: 0, left: 0 }} />
 
       {/* Header */}
       <header className="sticky top-0 z-50 w-full glass">

@@ -169,6 +169,12 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                 type="submit"
                 className="w-full"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
+                onTouchEnd={() => {
+                  // Prevent ghost clicks on some mobile devices
+                  // e.preventDefault(); 
+                  // Don't prevent default here as it might block form submission
+                  // This is just to ensure touchend triggers focus out/submission if needed
+                }}
               >
                 {activeTab === 'expense' ? (
                   <>
