@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Upload,
@@ -13,7 +14,8 @@ import {
   Lightbulb,
   Wallet,
   FolderOpen,
-  Edit3
+  Edit3,
+  Lock
 } from 'lucide-react';
 import { analyzePDFWithGemini } from '@/services/geminiAssistant';
 import type { AnalysisResult } from '@/services/pdfAnalyzer';
@@ -29,6 +31,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [editingCard, setEditingCard] = useState(false);
+  const [pdfPassword, setPdfPassword] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Abrir selector de archivos
@@ -92,7 +95,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
 
     setIsAnalyzing(true);
     try {
-      const pdfData = await analyzePDFWithGemini(files[0]);
+      const pdfData = await analyzePDFWithGemini(files[0], pdfPassword);
 
       // Crear resultado del análisis
       const result: AnalysisResult = {
@@ -161,11 +164,16 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
       } else {
         toast.success('¡Análisis completado!');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al analizar:', error);
-      toast.error('Error al analizar el PDF. Intenta con otro archivo.');
+      if (error.message?.includes('password') || error.message?.includes('encrypted') || error.message?.includes('contraseña')) {
+        toast.error('PDF protegido. Verificá la contraseña (generalmente tu DNI sin puntos ni espacios).');
+      } else {
+        toast.error('Error al analizar el PDF. Intenta con otro archivo.');
+      }
     } finally {
       setIsAnalyzing(false);
+      setPdfPassword('');
     }
   };
 
@@ -294,6 +302,25 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                 >
                   <X className="h-5 w-5" />
                 </Button>
+              </div>
+
+              {/* Password field */}
+              <div className="space-y-2">
+                <Label htmlFor="pdf-password" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  Contraseña del PDF (opcional)
+                </Label>
+                <Input
+                  id="pdf-password"
+                  type="text"
+                  placeholder="Ej: 12345678 (DNI sin puntos)"
+                  value={pdfPassword}
+                  onChange={(e) => setPdfPassword(e.target.value)}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  La mayoría de los bancos usan tu DNI sin puntos ni espacios
+                </p>
               </div>
 
               <Button

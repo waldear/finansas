@@ -336,12 +336,15 @@ Basándome en tu situación actual:
 }
 
 // Analizar PDF - versión simplificada
-export async function analyzePDFWithGemini(file: File): Promise<{
+export async function analyzePDFWithGemini(file: File, password?: string): Promise<{
   cardName: string;
   totalBalance: number;
   minimumPayment: number;
   dueDate: string;
-  transactions: { description: string; amount: number }[];
+  transactions: {
+    description: string;
+    amount: number;
+  }[];
 }> {
   // Si Gemini está disponible, usarlo para análisis más inteligente
   const genAI = getGenAI();
