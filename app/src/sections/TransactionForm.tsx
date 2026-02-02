@@ -183,11 +183,15 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                 type="button"
                 className="w-full relative z-50"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
-                onClick={handleManualSubmit}
-                onTouchStart={(e) => {
-                  // AGGRESSIVE MOBILE FIX:
-                  // Fire immediately on touch start to bypass any click-blocking overlays
-                  // or delay issues.
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleManualSubmit(e);
+                }}
+                onTouchEnd={(e) => {
+                  // Mobile-first: Use touchend instead of touchstart
+                  // to avoid accidental triggers and prevent click event
+                  e.preventDefault();
+                  e.stopPropagation();
                   handleManualSubmit(e);
                 }}
               >
