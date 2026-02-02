@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,7 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!amount || !description || !category) {
       toast.error('Por favor completa todos los campos');
       return;
@@ -120,8 +121,8 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                         {defaultCategories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
+                              <div
+                                className="w-3 h-3 rounded-full"
                                 style={{ backgroundColor: cat.color }}
                               />
                               {cat.name}
@@ -138,8 +139,8 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                         {userCustomCategories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
+                              <div
+                                className="w-3 h-3 rounded-full"
                                 style={{ backgroundColor: cat.color }}
                               />
                               {cat.name}
@@ -164,8 +165,8 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
               >
