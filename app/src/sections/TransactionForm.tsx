@@ -27,10 +27,18 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Reset category when tab changes
+  useEffect(() => {
+    setCategory('');
+  }, [activeTab]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!amount || !description || !category) return;
+    if (!amount || !description || !category) {
+      toast.error('Por favor completa todos los campos');
+      return;
+    }
 
     onAddTransaction({
       type: activeTab,
@@ -40,11 +48,11 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
       date,
     });
 
-    // Reset form
+    // Reset form but keep date
     setAmount('');
     setDescription('');
     setCategory('');
-    setDate(new Date().toISOString().split('T')[0]);
+    toast.success(`${activeTab === 'income' ? 'Ingreso' : 'Gasto'} agregado correctamente`);
   };
 
   const defaultCategories = activeTab === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;

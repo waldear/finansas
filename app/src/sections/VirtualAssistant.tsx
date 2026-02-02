@@ -4,13 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 import { Badge } from '@/components/ui/badge';
-import { 
-  Bot, 
-  Send, 
-  User, 
-  Sparkles, 
-  Bell, 
-  TrendingUp, 
+import {
+  Bot,
+  Send,
+  User,
+  Sparkles,
+  Bell,
+  TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Calendar
@@ -38,13 +38,20 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
   useEffect(() => {
     const geminiActive = isGeminiAvailable();
     setGeminiStatus(geminiActive);
-    
+
+    if (!geminiActive) {
+      toast.warning('API Key de Gemini no encontrada', {
+        description: 'El asistente funcionará en modo limitado. Agrega VITE_GEMINI_API_KEY en Vercel/Netlify.',
+        duration: 8000,
+      });
+    }
+
     setMessages([{
       id: 'welcome',
       type: 'assistant',
-      content: geminiActive 
+      content: geminiActive
         ? '¡Hola! 👋 Soy tu asistente financiero personal con Gemini AI.\n\nPuedo ayudarte con:\n• 📅 Recordarte vencimientos de tarjetas\n• 📊 Predecir tus gastos del próximo mes  \n• 💡 Darte consejos para salir de deudas\n• 📈 Analizar tu situación financiera\n\n¿Qué necesitas saber hoy?'
-        : '¡Hola! 👋 Soy tu asistente financiero personal (modo local).\n\nPuedo ayudarte con:\n• 📅 Recordarte vencimientos de tarjetas\n• 📊 Predecir tus gastos del próximo mes  \n• 💡 Darte consejos para salir de deudas\n• 📈 Analizar tu situación financiera\n\n💡 Para respuestas más inteligentes con IA, configurá tu VITE_GEMINI_API_KEY en el archivo .env.local\n\n¿Qué necesitas saber hoy?',
+        : '⚠️ **Modo Limitado activado**\n\nNo detecté tu API Key de Gemini. Para activar la IA real:\n1. Ve a tu panel de Vercel/Netlify\n2. Agrega la variable `VITE_GEMINI_API_KEY`\n3. Redespliega el proyecto\n\nMientras tanto, puedo responder consultas básicas sobre tus datos locales.',
       timestamp: new Date().toISOString(),
     }]);
   }, []);
@@ -83,7 +90,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     // Generar respuesta con Gemini
     try {
       const responseText = await generateGeminiResponse(trimmedMessage, { debts, transactions, summary });
-      
+
       const assistantMessage: AssistantMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -169,7 +176,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                 {reminders.slice(0, 3).map((reminder, idx) => (
                   <div key={idx} className="flex items-center justify-between text-sm">
                     <span className="truncate flex-1">{reminder.debtName}</span>
-                    <Badge 
+                    <Badge
                       variant={reminder.urgency === 'critical' ? 'destructive' : reminder.urgency === 'high' ? 'default' : 'secondary'}
                       className="ml-2 text-xs"
                     >
@@ -254,7 +261,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
             )}
           </CardTitle>
         </CardHeader>
-        
+
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           {/* Mensajes - Con scroll funcional */}
           <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: '350px' }}>
@@ -265,11 +272,10 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                   className={`flex gap-3 ${message.type === 'user' ? 'flex-row-reverse' : ''}`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      message.type === 'user'
+                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.type === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
-                    }`}
+                      }`}
                   >
                     {message.type === 'user' ? (
                       <User className="h-4 w-4" />
@@ -278,11 +284,10 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                     )}
                   </div>
                   <div
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      message.type === 'user'
+                    className={`max-w-[80%] rounded-lg p-3 ${message.type === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
-                    }`}
+                      }`}
                   >
                     <p className="text-sm whitespace-pre-line">{message.content}</p>
                     <span className="text-xs opacity-50 mt-1 block">
@@ -291,7 +296,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                   </div>
                 </div>
               ))}
-              
+
               {isTyping && (
                 <div className="flex gap-3">
                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -350,7 +355,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
 
           {/* Input */}
           <div className="p-4 border-t">
-            <form 
+            <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSendMessage();
@@ -363,8 +368,8 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                 onChange={(e) => setInputMessage(e.target.value)}
                 className="flex-1"
               />
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={!inputMessage.trim() || isTyping}
               >
                 <Send className="h-4 w-4" />
