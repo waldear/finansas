@@ -117,7 +117,7 @@ export function useFinance() {
   const deleteTransaction = useCallback(async (id: string) => {
     // Delete from cloud first
     await deleteFromCloud('transaction', id);
-    
+
     setData(prev => ({
       ...prev,
       transactions: prev.transactions.filter(t => t.id !== id),
@@ -127,7 +127,7 @@ export function useFinance() {
   const editTransaction = useCallback((updatedTransaction: Transaction) => {
     setData(prev => ({
       ...prev,
-      transactions: prev.transactions.map(t => 
+      transactions: prev.transactions.map(t =>
         t.id === updatedTransaction.id ? updatedTransaction : t
       ),
     }));
@@ -148,7 +148,7 @@ export function useFinance() {
 
   const deleteDebt = useCallback(async (id: string) => {
     await deleteFromCloud('debt', id);
-    
+
     setData(prev => ({
       ...prev,
       debts: prev.debts.filter(d => d.id !== id),
@@ -185,7 +185,7 @@ export function useFinance() {
 
   const deleteCustomCategory = useCallback(async (id: string) => {
     await deleteFromCloud('category', id);
-    
+
     setData(prev => ({
       ...prev,
       customCategories: prev.customCategories.filter(c => c.id !== id),
@@ -216,7 +216,7 @@ export function useFinance() {
 
   const deleteSavingsGoal = useCallback(async (id: string) => {
     await deleteFromCloud('goal', id);
-    
+
     setData(prev => {
       const goal = prev.savingsGoals.find(g => g.id === id);
       // Return saved money to available balance
@@ -262,12 +262,12 @@ export function useFinance() {
       return {
         ...prev,
         savingsGoals: prev.savingsGoals.map(g =>
-          g.id === goalId 
-            ? { 
-                ...g, 
-                currentAmount: g.currentAmount + amount,
-                isCompleted: g.currentAmount + amount >= g.targetAmount
-              }
+          g.id === goalId
+            ? {
+              ...g,
+              currentAmount: g.currentAmount + amount,
+              isCompleted: g.currentAmount + amount >= g.targetAmount
+            }
             : g
         ),
         transactions: [contributionTransaction, ...prev.transactions],
@@ -303,7 +303,7 @@ export function useFinance() {
 
   const getExpensesByCategory = useCallback(() => {
     const expenses: Record<string, number> = {};
-    
+
     // Add transaction expenses
     data.transactions
       .filter(t => t.type === 'expense')
@@ -431,6 +431,47 @@ export function useFinance() {
     getExpensesByCategory,
     getRecommendations,
     getUpcomingPayments,
+    resetData: useCallback(async () => {
+      // Clear local state
+      setData({
+        transactions: [],
+        debts: [],
+        reminders: [],
+        customCategories: [],
+        savingsGoals: [],
+      });
+
+      // Clear LocalStorage
+      localStorage.removeItem(STORAGE_KEY);
+
+      // Clear Cloud if authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // We can't delete everything in one go easily without a specific RPC or multiple calls
+        // For now, we will rely on the state update syncing empty arrays, 
+        // OR we can explicitly call delete on tables.
+        // Given syncToCloud upserts, sending empty arrays might not delete existing rows on server 
+        // unless we change sync logic.
+        // Better approach for now: clear local and let the user know. 
+        // Ideally we should have a 'wipe' function in syncService but to keep it simple and safe:
+        // We will just clear local storage and state. The sync service might need an update to handle deletions if we wanted full cloud wipe.
+        // Wait, the user wants to fix the "phantom data". 
+        // If the phantom data is in the cloud, clearing local won't help if it re-syncs.
+        // But the previous analysis showed the data was likely coming from the `useEffect` seed.
+        // So clearing local + removing the seed should be enough.
+
+        // However, if the user synced the seed data, it IS in the cloud.
+        // So we DO need to wipe the cloud.
+        // Let's iterate and delete or use a brute force approach.
+
+        const tables = ['transactions', 'debts', 'custom_categories', 'savings_goals'];
+        await Promise.all(tables.map(table =>
+          supabase.from(table).delete().eq('user_id', user.id)
+        ));
+      }
+
+      toast.success('Todos los datos han sido eliminados');
+    }, []),
   };
 }
 

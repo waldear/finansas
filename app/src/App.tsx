@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -78,66 +78,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Load initial data from user's image
-  useEffect(() => {
-    if (isLoaded && transactions.length === 0 && debts.length === 0) {
-      // Add initial income data from user's image
-      const initialIncome = [
-        { type: 'income' as const, amount: 1200000, description: 'Sueldo', category: 'salary', date: '2025-02-01' },
-        { type: 'income' as const, amount: 800000, description: 'Ingresos Extra', category: 'extra', date: '2025-02-01' },
-      ];
 
-      // Add initial expenses from user's image
-      const initialExpenses = [
-        { type: 'expense' as const, amount: 270000, description: 'Alquiler', category: 'housing', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 100000, description: 'Luz', category: 'utilities', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 40000, description: 'Internet', category: 'internet', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 45000, description: 'Seguro Auto', category: 'insurance', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 35000, description: 'Celular', category: 'internet', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 30000, description: 'Tel Bren', category: 'internet', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 150000, description: 'Salón', category: 'other', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 20000, description: 'Agua', category: 'utilities', date: '2025-02-01' },
-        { type: 'expense' as const, amount: 40000, description: 'Mercadería', category: 'food', date: '2025-02-01' },
-      ];
-
-      // Add debts from user's image
-      const initialDebts = [
-        {
-          name: 'Tarjeta Naranja',
-          totalAmount: 600000,
-          monthlyPayment: 600000,
-          remainingInstallments: 1,
-          totalInstallments: 1,
-          category: 'credit_card' as const,
-          nextPaymentDate: '2025-02-15',
-        },
-        {
-          name: 'Mercado Pago',
-          totalAmount: 160000,
-          monthlyPayment: 160000,
-          remainingInstallments: 1,
-          totalInstallments: 1,
-          category: 'credit_card' as const,
-          nextPaymentDate: '2025-02-20',
-        },
-        {
-          name: 'Nativa y Master',
-          totalAmount: 345000,
-          monthlyPayment: 345000,
-          remainingInstallments: 1,
-          totalInstallments: 1,
-          category: 'credit_card' as const,
-          nextPaymentDate: '2025-02-25',
-        },
-      ];
-
-      initialIncome.forEach(addTransaction);
-      initialExpenses.forEach(addTransaction);
-      initialDebts.forEach(addDebt);
-
-      toast.success('¡Bienvenido! Tus datos iniciales han sido cargados.');
-    }
-  }, [isLoaded, transactions.length, debts.length, addTransaction, addDebt]);
 
   const handleAddTransaction = (transaction: Parameters<typeof addTransaction>[0]) => {
     addTransaction(transaction);
@@ -333,6 +274,19 @@ function App() {
               )}
 
               <div className="flex items-center gap-2 border-l pl-4 ml-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    if (window.confirm('¿Estás seguro de que deseas borrar TODOS los datos? Esta acción no se puede deshacer.')) {
+                      resetData();
+                    }
+                  }}
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
+                  title="Reiniciar datos"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
                 <ThemeToggle />
                 <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors">
                   <LogOut className="h-4 w-4" />
