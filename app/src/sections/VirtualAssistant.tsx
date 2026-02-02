@@ -13,9 +13,12 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
-  Calendar
+  Calendar,
+  Paperclip,
+  FileText,
+  X
 } from 'lucide-react';
-import { generateGeminiResponse, generateFinancialAdvice, isGeminiAvailable, type AssistantMessage } from '@/services/geminiAssistant';
+import { generateGeminiResponse, generateFinancialAdvice, isGeminiAvailable, analyzePDFWithGemini, type AssistantMessage } from '@/services/geminiAssistant';
 import { generatePaymentReminders, generateMonthlyForecast } from '@/services/assistant';
 import type { Debt, Transaction, FinancialSummary } from '@/types/finance';
 import { toast } from 'sonner';
@@ -32,7 +35,9 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
   const [isTyping, setIsTyping] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string[]>([]);
   const [geminiStatus, setGeminiStatus] = useState<boolean>(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Verificar estado de Gemini al cargar y establecer mensaje de bienvenida
   useEffect(() => {
@@ -73,13 +78,21 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
   // Enviar mensaje
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim();
-    if (!trimmedMessage) return;
+
+    // Si hay PDF adjunto pero no mensaje, usar mensaje automático
+    const finalMessage = attachedFile
+      ? (trimmedMessage || '¿Qué información puedes darme sobre este resumen de tarjeta?')
+      : trimmedMessage;
+
+    if (!finalMessage && !attachedFile) return;
 
     // Agregar mensaje del usuario
     const userMessage: AssistantMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: trimmedMessage,
+      content: attachedFile
+        ? `📎 ${attachedFile.name}\n\n${finalMessage}`
+        : finalMessage,
       timestamp: new Date().toISOString(),
     };
 
@@ -87,9 +100,45 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     setInputMessage('');
     setIsTyping(true);
 
-    // Generar respuesta con Gemini
+    // Generar respuesta
     try {
-      const responseText = await generateGeminiResponse(trimmedMessage, { debts, transactions, summary });
+      let responseText = '';
+
+      // Si hay PDF adjunto, analizarlo primero
+      if (attachedFile && attachedFile.type === 'application/pdf') {
+        try {
+          const pdfData = await analyzePDFWithGemini(attachedFile);
+
+          responseText = `📄 **Análisis del PDF completado**\n\n` +
+            `🏦 **Tarjeta:** ${pdfData.cardName}\n` +
+            `💳 **Saldo Total:** $${pdfData.totalBalance.toLocaleString('es-AR')}\n` +
+            `💰 **Pago Mínimo:** $${pdfData.minimumPayment.toLocaleString('es-AR')}\n` +
+            `📅 **Vencimiento:** ${pdfData.dueDate}\n\n`;
+
+          if (pdfData.transactions.length > 0) {
+            responseText += `**Transacciones destacadas:**\n`;
+            pdfData.transactions.slice(0, 5).forEach(t => {
+              responseText += `• ${t.description}: $${t.amount.toLocaleString('es-AR')}\n`;
+            });
+          }
+
+          responseText += `\n💡 **Consejo:** Te recomiendo pagar más que el mínimo para evitar intereses. ` +
+            `¿Querés que agregue esta deuda a tu lista de seguimiento?`;
+
+        } catch (pdfError: any) {
+          responseText = `❌ **Error al analizar el PDF**\n\n`;
+          if (pdfError.message?.includes('password') || pdfError.message?.includes('encrypted')) {
+            responseText += `Este PDF está protegido con contraseña. ` +
+              `Por favor, enviá el PDF sin contraseña o con la contraseña removida.\n\n` +
+              `💡 **Tip:** La mayoría de los bancos usan tu DNI sin puntos ni espacios.`;
+          } else {
+            responseText += `No pude leer el PDF. Asegurate de que sea un resumen de tarjeta válido.`;
+          }
+        }
+      } else {
+        // Sin PDF, respuesta normal
+        responseText = await generateGeminiResponse(finalMessage, { debts, transactions, summary });
+      }
 
       const assistantMessage: AssistantMessage = {
         id: (Date.now() + 1).toString(),
@@ -110,6 +159,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsTyping(false);
+      setAttachedFile(null); // Limpiar archivo adjunto
     }
   };
 
@@ -273,8 +323,8 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                 >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.type === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
                       }`}
                   >
                     {message.type === 'user' ? (
@@ -285,8 +335,8 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
                   </div>
                   <div
                     className={`max-w-[80%] rounded-lg p-3 ${message.type === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
                       }`}
                   >
                     <p className="text-sm whitespace-pre-line">{message.content}</p>
@@ -355,6 +405,22 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
 
           {/* Input */}
           <div className="p-4 border-t">
+            {/* File attachment preview */}
+            {attachedFile && (
+              <div className="mb-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-sm flex-1">{attachedFile.name}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setAttachedFile(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -362,15 +428,41 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
               }}
               className="flex gap-2"
             >
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setAttachedFile(file);
+                    toast.success(`PDF adjunto: ${file.name}`);
+                  }
+                }}
+              />
+
+              {/* Attach button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                title="Adjuntar PDF"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+
               <Input
-                placeholder="Escribe tu consulta..."
+                placeholder={attachedFile ? "Pregunta algo sobre el PDF..." : "Escribe tu consulta..."}
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 className="flex-1"
               />
               <Button
                 type="submit"
-                disabled={!inputMessage.trim() || isTyping}
+                disabled={(!inputMessage.trim() && !attachedFile) || isTyping}
               >
                 <Send className="h-4 w-4" />
               </Button>
