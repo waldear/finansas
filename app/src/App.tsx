@@ -73,6 +73,7 @@ function App() {
     getExpensesByCategory,
     getRecommendations,
     getUpcomingPayments,
+    resetData,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState('dashboard');
