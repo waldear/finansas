@@ -181,9 +181,15 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
 
               <Button
                 type="button"
-                className="w-full"
+                className="w-full relative z-50"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
                 onClick={handleManualSubmit}
+                onTouchStart={(e) => {
+                  // AGGRESSIVE MOBILE FIX:
+                  // Fire immediately on touch start to bypass any click-blocking overlays
+                  // or delay issues.
+                  handleManualSubmit(e);
+                }}
               >
                 {activeTab === 'expense' ? (
                   <>
