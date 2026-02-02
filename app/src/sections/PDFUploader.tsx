@@ -3,11 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { 
-  Upload, 
-  FileText, 
-  X, 
-  CheckCircle2, 
+import {
+  Upload,
+  FileText,
+  X,
+  CheckCircle2,
   Loader2,
   CreditCard,
   Lightbulb,
@@ -43,7 +43,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (selectedFiles && selectedFiles.length > 0) {
-      const pdfFiles = Array.from(selectedFiles).filter(f => 
+      const pdfFiles = Array.from(selectedFiles).filter(f =>
         f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
       );
       if (pdfFiles.length > 0) {
@@ -59,10 +59,10 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const droppedFiles = e.dataTransfer.files;
     if (droppedFiles && droppedFiles.length > 0) {
-      const pdfFiles = Array.from(droppedFiles).filter(f => 
+      const pdfFiles = Array.from(droppedFiles).filter(f =>
         f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
       );
       if (pdfFiles.length > 0) {
@@ -89,11 +89,11 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
       toast.error('No hay archivos para analizar');
       return;
     }
-    
+
     setIsAnalyzing(true);
     try {
       const pdfData = await analyzePDFWithGemini(files[0]);
-      
+
       // Crear resultado del análisis
       const result: AnalysisResult = {
         cards: [{
@@ -153,9 +153,9 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
           date: new Date().toISOString().split('T')[0],
         }],
       };
-      
+
       setAnalysisResult(result);
-      
+
       if (pdfData.totalBalance === 0) {
         toast.info('No se detectaron montos en el PDF. Podés editarlos manualmente.');
       } else {
@@ -172,7 +172,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
   // Actualizar datos manualmente
   const updateCardData = (field: string, value: string | number) => {
     if (!analysisResult) return;
-    
+
     const updated = { ...analysisResult };
     if (field === 'cardName') {
       updated.cards[0].cardName = value as string;
@@ -200,7 +200,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
       updated.cards[0].dueDate = value as string;
       updated.debtsToAdd[0].nextPaymentDate = value as string;
     }
-    
+
     setAnalysisResult(updated);
   };
 
@@ -257,7 +257,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
               <p className="text-sm text-muted-foreground mb-4">
                 o
               </p>
-              <Button 
+              <Button
                 type="button"
                 onClick={openFileSelector}
                 variant="default"
@@ -287,17 +287,26 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                   variant="ghost"
                   size="icon"
                   onClick={() => removeFile(0)}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    removeFile(0);
+                  }}
                 >
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              
+
               <Button
                 type="button"
-                onClick={handleAnalyze}
-                disabled={isAnalyzing}
-                className="w-full"
+                className="w-full relative z-50"
                 size="lg"
+                disabled={isAnalyzing}
+                onClick={handleAnalyze}
+                onTouchStart={() => {
+                  if (!isAnalyzing) {
+                    handleAnalyze();
+                  }
+                }}
               >
                 {isAnalyzing ? (
                   <>
@@ -326,8 +335,8 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                 Datos Detectados
               </CardTitle>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setEditingCard(!editingCard)}
               >
@@ -340,14 +349,14 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium mb-1 block">Nombre de la tarjeta</label>
-                    <Input 
+                    <Input
                       value={analysisResult.cards[0].cardName}
                       onChange={(e) => updateCardData('cardName', e.target.value)}
                     />
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">Saldo total ($)</label>
-                    <Input 
+                    <Input
                       type="number"
                       value={analysisResult.cards[0].totalBalance}
                       onChange={(e) => updateCardData('totalBalance', e.target.value)}
@@ -355,7 +364,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">Pago mínimo ($)</label>
-                    <Input 
+                    <Input
                       type="number"
                       value={analysisResult.cards[0].minimumPayment}
                       onChange={(e) => updateCardData('minimumPayment', e.target.value)}
@@ -363,7 +372,7 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1 block">Fecha de vencimiento</label>
-                    <Input 
+                    <Input
                       type="date"
                       value={analysisResult.cards[0].dueDate}
                       onChange={(e) => updateCardData('dueDate', e.target.value)}
@@ -411,11 +420,11 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
               <Alert className={availableFunds >= analysisResult.totalDebt ? 'bg-green-50 border-green-300' : 'bg-yellow-50 border-yellow-300'}>
                 <Wallet className="h-4 w-4" />
                 <AlertTitle>
-                  {availableFunds >= analysisResult.totalDebt 
-                    ? '¡Tienes fondos suficientes!' 
+                  {availableFunds >= analysisResult.totalDebt
+                    ? '¡Tienes fondos suficientes!'
                     : availableFunds >= analysisResult.totalMinimumPayment
-                    ? 'Podés pagar el mínimo'
-                    : 'Fondos insuficientes'}
+                      ? 'Podés pagar el mínimo'
+                      : 'Fondos insuficientes'}
                 </AlertTitle>
                 <AlertDescription className="mt-2">
                   <p className="mb-2">
@@ -425,8 +434,8 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                     {availableFunds >= analysisResult.totalDebt
                       ? 'Pagá el total y evitá intereses.'
                       : availableFunds >= analysisResult.totalMinimumPayment
-                      ? 'Pagá lo que puedas, pero priorizá las tarjetas con mayor interés.'
-                      : 'Contactá a tu banco para renegociar.'}
+                        ? 'Pagá lo que puedas, pero priorizá las tarjetas con mayor interés.'
+                        : 'Contactá a tu banco para renegociar.'}
                   </p>
                 </AlertDescription>
               </Alert>
