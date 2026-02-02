@@ -79,8 +79,39 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim();
 
-    // Si hay PDF adjunto pero no mensaje, usar mensaje automático
-    const finalMessage = attachedFile
+    // Si hay PDF adjunto pero no mensaje, preguntar por contraseña primero
+    if (attachedFile && !trimmedMessage) {
+      const userMessage: AssistantMessage = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: `📎 ${attachedFile.name}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      const botMessage: AssistantMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `📄 Perfecto, recibí el PDF **${attachedFile.name}**.\n\n` +
+          `⚠️ **¿Este PDF tiene contraseña?**\n\n` +
+          `La mayoría de los resúmenes bancarios están protegidos con tu **DNI sin puntos ni espacios**.\n\n` +
+          `👉 Si tiene contraseña, escribí tu DNI (ej: 12345678)\n` +
+          `👉 Si NO tiene contraseña, escribí "sin contraseña" o "no"`,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages(prev => [...prev, userMessage, botMessage]);
+      setInputMessage('');
+      return;
+    }
+
+    // Detectar si el usuario está respondiendo con una contraseña
+    const isPasswordResponse = attachedFile && trimmedMessage && (
+      /^\d{7,8}$/.test(trimmedMessage) || // DNI sin puntos
+      trimmedMessage.toLowerCase().includes('sin contraseña') ||
+      trimmedMessage.toLowerCase() === 'no'
+    );
+
+    const finalMessage = attachedFile && !isPasswordResponse
       ? (trimmedMessage || '¿Qué información puedes darme sobre este resumen de tarjeta?')
       : trimmedMessage;
 
@@ -90,9 +121,7 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     const userMessage: AssistantMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: attachedFile
-        ? `📎 ${attachedFile.name}\n\n${finalMessage}`
-        : finalMessage,
+      content: finalMessage,
       timestamp: new Date().toISOString(),
     };
 
@@ -104,35 +133,53 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     try {
       let responseText = '';
 
-      // Si hay PDF adjunto, analizarlo primero
+      // Si hay PDF adjunto, analizarlo
       if (attachedFile && attachedFile.type === 'application/pdf') {
         try {
-          const pdfData = await analyzePDFWithGemini(attachedFile);
+          // Determinar si hay contraseña
+          const password = isPasswordResponse && /^\d{7,8}$/.test(trimmedMessage)
+            ? trimmedMessage
+            : '';
 
-          responseText = `📄 **Análisis del PDF completado**\n\n` +
+          const pdfData = await analyzePDFWithGemini(attachedFile, password);
+
+          responseText = `✅ **¡Análisis completado!**\n\n` +
             `🏦 **Tarjeta:** ${pdfData.cardName}\n` +
             `💳 **Saldo Total:** $${pdfData.totalBalance.toLocaleString('es-AR')}\n` +
             `💰 **Pago Mínimo:** $${pdfData.minimumPayment.toLocaleString('es-AR')}\n` +
             `📅 **Vencimiento:** ${pdfData.dueDate}\n\n`;
 
           if (pdfData.transactions.length > 0) {
-            responseText += `**Transacciones destacadas:**\n`;
+            responseText += `**📊 Transacciones destacadas:**\n`;
             pdfData.transactions.slice(0, 5).forEach(t => {
-              responseText += `• ${t.description}: $${t.amount.toLocaleString('es-AR')}\n`;
+              responseText += `  • ${t.description}: $${t.amount.toLocaleString('es-AR')}\n`;
             });
+            responseText += `\n`;
           }
 
-          responseText += `\n💡 **Consejo:** Te recomiendo pagar más que el mínimo para evitar intereses. ` +
+          responseText += `💡 **Mi consejo:** ${pdfData.totalBalance > pdfData.minimumPayment * 2
+              ? `Este saldo es alto. Si podés, pagá más que el mínimo para evitar intereses.`
+              : `Intentá pagar el total para no generar intereses.`
+            }\n\n` +
             `¿Querés que agregue esta deuda a tu lista de seguimiento?`;
 
         } catch (pdfError: any) {
-          responseText = `❌ **Error al analizar el PDF**\n\n`;
+          console.error('PDF Error:', pdfError);
+          responseText = `❌ **No pude analizar el PDF**\n\n`;
+
           if (pdfError.message?.includes('password') || pdfError.message?.includes('encrypted')) {
-            responseText += `Este PDF está protegido con contraseña. ` +
-              `Por favor, enviá el PDF sin contraseña o con la contraseña removida.\n\n` +
-              `💡 **Tip:** La mayoría de los bancos usan tu DNI sin puntos ni espacios.`;
+            responseText += `🔒 Este PDF está **protegido con contraseña** y la contraseña que proporcionaste no funcionó.\n\n` +
+              `Intentá de nuevo con:\n` +
+              `  • Tu DNI sin puntos ni espacios (ej: 12345678)\n` +
+              `  • Tu CUIL sin guiones\n` +
+              `  • Tu fecha de nacimiento (DDMMAAAA)\n\n` +
+              `💡 **Tip:** Si borraste el PDF, volvé a adjuntarlo y probá otra contraseña.`;
           } else {
-            responseText += `No pude leer el PDF. Asegurate de que sea un resumen de tarjeta válido.`;
+            responseText += `📄 El archivo no parece ser un resumen de tarjeta válido o está dañado.\n\n` +
+              `Asegurate de que sea:\n` +
+              `  • Un PDF de resumen de tarjeta de crédito\n` +
+              `  • No una imagen escaneada (debe tener texto seleccionable)\n` +
+              `  • Un archivo no corrupto`;
           }
         }
       } else {
@@ -159,7 +206,10 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsTyping(false);
-      setAttachedFile(null); // Limpiar archivo adjunto
+      // Solo limpiar archivo si el análisis fue exitoso o hubo error definitivo
+      if (!attachedFile || !isPasswordResponse) {
+        setAttachedFile(null);
+      }
     }
   };
 
