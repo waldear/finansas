@@ -294,11 +294,8 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="touch-manipulation"
                   onClick={() => removeFile(0)}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    removeFile(0);
-                  }}
                 >
                   <X className="h-5 w-5" />
                 </Button>
@@ -325,15 +322,10 @@ export function PDFUploader({ onAnalysisComplete, availableFunds }: PDFUploaderP
 
               <Button
                 type="button"
-                className="w-full relative z-50"
+                className="w-full relative z-50 touch-manipulation"
                 size="lg"
                 disabled={isAnalyzing}
                 onClick={handleAnalyze}
-                onTouchStart={() => {
-                  if (!isAnalyzing) {
-                    handleAnalyze();
-                  }
-                }}
               >
                 {isAnalyzing ? (
                   <>

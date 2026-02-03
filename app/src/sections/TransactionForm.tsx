@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PlusCircle, MinusCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/types/finance';
 import type { TransactionType, Category } from '@/types/finance';
 
@@ -34,18 +35,16 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
   }, [activeTab]);
 
   /* 
-   * DEBUG MODE: Logic changed to catch mobile errors
+   * Form Handler
    */
-  const handleManualSubmit = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleManualSubmit = (e: React.MouseEvent<HTMLButtonElement>) => {
     // Stop any form events
     e.preventDefault();
-    e.stopPropagation();
-
-    // 1. debug alert
-    // alert('Procesando click...'); 
 
     if (!amount || !description || !category) {
-      alert('Error: Faltan completar campos.\n\nAsegurate de tener:\n- Monto\n- Descripción\n- Categoría');
+      toast.error('Faltan completar campos', {
+        description: 'Asegurate de tener Monto, Descripción y Categoría.'
+      });
       return;
     }
 
@@ -63,10 +62,11 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
       setDescription('');
       setCategory('');
 
-      // Force feedback
-      alert('¡Listo! Agregado correctamente.');
+      // Success handled by parent or here if needed, but parent usually shows toast. 
+      // Checking App.tsx, handleAddTransaction shows toast. So we don't need double toast.
+      // But clearing fields is good.
     } catch (err) {
-      alert('Error interno: ' + err);
+      toast.error('Error interno', { description: String(err) });
     }
   };
 
@@ -181,19 +181,9 @@ export function TransactionForm({ onAddTransaction, customCategories = [] }: Tra
 
               <Button
                 type="button"
-                className="w-full relative z-50"
+                className="w-full relative z-50 touch-manipulation transform active:scale-95 transition-transform"
                 variant={activeTab === 'expense' ? 'destructive' : 'default'}
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleManualSubmit(e);
-                }}
-                onTouchEnd={(e) => {
-                  // Mobile-first: Use touchend instead of touchstart
-                  // to avoid accidental triggers and prevent click event
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleManualSubmit(e);
-                }}
+                onClick={handleManualSubmit}
               >
                 {activeTab === 'expense' ? (
                   <>

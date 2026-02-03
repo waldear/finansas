@@ -1,73 +1,58 @@
-# React + TypeScript + Vite
+# Finansas Pro 🚀
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Plataforma financiera inteligente, segura y escalable. Construida con React, Tailwind, Vercel Serverless Functions y Google Gemini.
 
-Currently, two official plugins are available:
+## Características Principales
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Gestión de Gastos e Ingresos**: Interfaz optimizada mobile-first.
+- **Análisis de Resúmenes PDF**: Procesamiento server-side de estados de cuenta bancarios (PDF -> Texto -> IA).
+- **Asistente Financiero IA**: Chat inteligente con contexto real de tus finanzas.
+- **Seguridad**: Arquitectura backend-for-frontend (BFF) para proteger API Keys.
+- **Performance**: Code splitting y carga perezosa (Lazy Loading) para inicio instantáneo.
 
-## React Compiler
+## Arquitectura Técnica
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Frontend
+- **Framework**: React 19 + Vite.
+- **UI**: Tailwind CSS + Shadcn UI + Lucide React.
+- **Estado**: Hooks personalizados (`useFinance`).
+- **Optimización**: `React.lazy` + `Suspense`.
 
-## Expanding the ESLint configuration
+### Backend (Serverless)
+Ubicado en `/api`, ejecutándose como Vercel Functions (Node.js):
+- `POST /api/analyze-pdf`: Extracción de texto de PDFs usando `pdf-parse`.
+- `POST /api/gemini`: Proxy seguro para interacción con LLM (Gemini 1.5 Flash).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Configuración Local
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. **Requisitos**: Node.js 18+ y Vercel CLI.
+2. **Instalación**:
+   ```bash
+   npm install
+   npm i -g vercel
+   ```
+3. **Variables de Entorno**:
+   Crea un archivo `.env.local` en la raíz (o configura en Vercel):
+   ```env
+   GEMINI_API_KEY=tu_api_key_de_google_ai_studio
+   # VITE_XXX keys ya no son necesarias para la IA
+   ```
+4. **Ejecutar**:
+   Para probar la integración completa (Frontend + Backend):
+   ```bash
+   vercel dev
+   ```
+   Esto iniciará el servidor en `http://localhost:3000`.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Despliegue
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+vercel deploy
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Estructura de Directorios
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `/api`: Funciones Serverless (Backend).
+- `/src`: Código fuente Frontend.
+  - `/sections`: Módulos de la aplicación (Lazy loaded).
+  - `/services`: Lógica de negocio y llamadas a API.

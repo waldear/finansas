@@ -13,10 +13,10 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
-  Calendar,
   Paperclip,
   FileText,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 import { generateGeminiResponse, generateFinancialAdvice, isGeminiAvailable, analyzePDFWithGemini, type AssistantMessage } from '@/services/geminiAssistant';
 import { generatePaymentReminders, generateMonthlyForecast } from '@/services/assistant';
@@ -27,9 +27,10 @@ interface VirtualAssistantProps {
   debts: Debt[];
   transactions: Transaction[];
   summary: FinancialSummary;
+  onAddTransaction: (transaction: any) => void;
 }
 
-export function VirtualAssistant({ debts, transactions, summary }: VirtualAssistantProps) {
+export function VirtualAssistant({ debts, transactions, summary, onAddTransaction }: VirtualAssistantProps) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -39,29 +40,39 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Verificar estado de Gemini al cargar y establecer mensaje de bienvenida
+  // Cargar estado inicial y persistencia
   useEffect(() => {
     const geminiActive = isGeminiAvailable();
     setGeminiStatus(geminiActive);
 
-    if (!geminiActive) {
-      toast.warning('API Key de Gemini no encontrada', {
-        description: 'El asistente funcionará en modo limitado. Agrega VITE_GEMINI_API_KEY en Vercel/Netlify.',
-        duration: 8000,
-      });
+    // Cargar historial
+    const storedHistory = localStorage.getItem('chat_history');
+    if (storedHistory) {
+      try {
+        setMessages(JSON.parse(storedHistory));
+      } catch (e) {
+        console.error('Error loading chat history', e);
+      }
+    } else {
+      setMessages([{
+        id: 'welcome',
+        type: 'assistant',
+        content: geminiActive
+          ? '¡Hola! 👋 Soy tu asistente financiero personal.\n\nPuedes pedirme:\n• "Agrega un gasto de $5000 en super"\n• "¿Cuánto gasté este mes?"\n• Analizar PDFs o darte consejos.\n\n¿Qué hacemos hoy?'
+          : '⚠️ Modo Limitado: Sin conexión a Gemini.',
+        timestamp: new Date().toISOString(),
+      }]);
     }
-
-    setMessages([{
-      id: 'welcome',
-      type: 'assistant',
-      content: geminiActive
-        ? '¡Hola! 👋 Soy tu asistente financiero personal con Gemini AI.\n\nPuedo ayudarte con:\n• 📅 Recordarte vencimientos de tarjetas\n• 📊 Predecir tus gastos del próximo mes  \n• 💡 Darte consejos para salir de deudas\n• 📈 Analizar tu situación financiera\n\n¿Qué necesitas saber hoy?'
-        : '⚠️ **Modo Limitado activado**\n\nNo detecté tu API Key de Gemini. Para activar la IA real:\n1. Ve a tu panel de Vercel/Netlify\n2. Agrega la variable `VITE_GEMINI_API_KEY`\n3. Redespliega el proyecto\n\nMientras tanto, puedo responder consultas básicas sobre tus datos locales.',
-      timestamp: new Date().toISOString(),
-    }]);
   }, []);
 
-  // Cargar consejos de IA al inicio
+  // Persistir mensajes
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('chat_history', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Cargar consejos de IA
   useEffect(() => {
     const loadAdvice = async () => {
       const advice = await generateFinancialAdvice(debts, summary);
@@ -70,17 +81,45 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     loadAdvice();
   }, [debts, summary]);
 
-  // Scroll al final de los mensajes
+  // Scroll al final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  const clearHistory = () => {
+    if (confirm('¿Borrar historial de chat?')) {
+      localStorage.removeItem('chat_history');
+      setMessages([{
+        id: 'new-welcome',
+        type: 'assistant',
+        content: 'Historial borrado. ¿En qué puedo ayudarte?',
+        timestamp: new Date().toISOString()
+      }]);
+    }
+  };
+
+  // Procesar Acción del Agente
+  const handleAgentAction = (action: any) => {
+    if (action && action.action === 'ADD_TRANSACTION' && action.data) {
+      const { amount, description, category, type, date } = action.data;
+      onAddTransaction({
+        amount: Number(amount),
+        description: description || 'Gasto registrado por IA',
+        category: category || 'other',
+        type: type || 'expense',
+        date: date || new Date().toISOString().split('T')[0]
+      });
+      toast.success(`✅ ${type === 'income' ? 'Ingreso' : 'Gasto'} registrado: $${amount}`);
+    }
+  };
 
   // Enviar mensaje
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim();
 
-    // Si hay PDF adjunto pero no mensaje, preguntar por contraseña primero
+    // Lógica de PDF/Password existente...
     if (attachedFile && !trimmedMessage) {
+      // ... (Mismo código de pregunta password) ...
       const userMessage: AssistantMessage = {
         id: Date.now().toString(),
         type: 'user',
@@ -91,33 +130,27 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
       const botMessage: AssistantMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: `📄 Perfecto, recibí el PDF **${attachedFile.name}**.\n\n` +
-          `⚠️ **¿Este PDF tiene contraseña?**\n\n` +
-          `La mayoría de los resúmenes bancarios están protegidos con tu **DNI sin puntos ni espacios**.\n\n` +
-          `👉 Si tiene contraseña, escribí tu DNI (ej: 12345678)\n` +
-          `👉 Si NO tiene contraseña, escribí "sin contraseña" o "no"`,
+        content: `📄 Recibí **${attachedFile.name}**. Si tiene clave, escríbela. Si no, dime qué analizar.`,
         timestamp: new Date().toISOString(),
       };
-
       setMessages(prev => [...prev, userMessage, botMessage]);
       setInputMessage('');
       return;
     }
 
-    // Detectar si el usuario está respondiendo con una contraseña
     const isPasswordResponse = attachedFile && trimmedMessage && (
-      /^\d{7,8}$/.test(trimmedMessage) || // DNI sin puntos
+      /^\d{7,8}$/.test(trimmedMessage) ||
       trimmedMessage.toLowerCase().includes('sin contraseña') ||
       trimmedMessage.toLowerCase() === 'no'
     );
 
     const finalMessage = attachedFile && !isPasswordResponse
-      ? (trimmedMessage || '¿Qué información puedes darme sobre este resumen de tarjeta?')
+      ? (trimmedMessage || 'Analiza este archivo')
       : trimmedMessage;
 
     if (!finalMessage && !attachedFile) return;
 
-    // Agregar mensaje del usuario
+    // Agregar mensaje usuario
     const userMessage: AssistantMessage = {
       id: Date.now().toString(),
       type: 'user',
@@ -129,62 +162,26 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     setInputMessage('');
     setIsTyping(true);
 
-    // Generar respuesta
     try {
       let responseText = '';
 
-      // Si hay PDF adjunto, analizarlo
+      // ANÁLISIS PDF
       if (attachedFile && attachedFile.type === 'application/pdf') {
-        try {
-          // Determinar si hay contraseña
-          const password = isPasswordResponse && /^\d{7,8}$/.test(trimmedMessage)
-            ? trimmedMessage
-            : '';
+        // ... (Lógica PDF existente, asumiendo que analyzePDF devuelve objeto)
+        const password = isPasswordResponse && /^\d{7,8}$/.test(trimmedMessage) ? trimmedMessage : '';
+        const pdfData = await analyzePDFWithGemini(attachedFile, password);
 
-          const pdfData = await analyzePDFWithGemini(attachedFile, password);
-
-          responseText = `✅ **¡Análisis completado!**\n\n` +
-            `🏦 **Tarjeta:** ${pdfData.cardName}\n` +
-            `💳 **Saldo Total:** $${pdfData.totalBalance.toLocaleString('es-AR')}\n` +
-            `💰 **Pago Mínimo:** $${pdfData.minimumPayment.toLocaleString('es-AR')}\n` +
-            `📅 **Vencimiento:** ${pdfData.dueDate}\n\n`;
-
-          if (pdfData.transactions.length > 0) {
-            responseText += `**📊 Transacciones destacadas:**\n`;
-            pdfData.transactions.slice(0, 5).forEach(t => {
-              responseText += `  • ${t.description}: $${t.amount.toLocaleString('es-AR')}\n`;
-            });
-            responseText += `\n`;
-          }
-
-          responseText += `💡 **Mi consejo:** ${pdfData.totalBalance > pdfData.minimumPayment * 2
-              ? `Este saldo es alto. Si podés, pagá más que el mínimo para evitar intereses.`
-              : `Intentá pagar el total para no generar intereses.`
-            }\n\n` +
-            `¿Querés que agregue esta deuda a tu lista de seguimiento?`;
-
-        } catch (pdfError: any) {
-          console.error('PDF Error:', pdfError);
-          responseText = `❌ **No pude analizar el PDF**\n\n`;
-
-          if (pdfError.message?.includes('password') || pdfError.message?.includes('encrypted')) {
-            responseText += `🔒 Este PDF está **protegido con contraseña** y la contraseña que proporcionaste no funcionó.\n\n` +
-              `Intentá de nuevo con:\n` +
-              `  • Tu DNI sin puntos ni espacios (ej: 12345678)\n` +
-              `  • Tu CUIL sin guiones\n` +
-              `  • Tu fecha de nacimiento (DDMMAAAA)\n\n` +
-              `💡 **Tip:** Si borraste el PDF, volvé a adjuntarlo y probá otra contraseña.`;
-          } else {
-            responseText += `📄 El archivo no parece ser un resumen de tarjeta válido o está dañado.\n\n` +
-              `Asegurate de que sea:\n` +
-              `  • Un PDF de resumen de tarjeta de crédito\n` +
-              `  • No una imagen escaneada (debe tener texto seleccionable)\n` +
-              `  • Un archivo no corrupto`;
-          }
-        }
+        responseText = `✅ **Análisis PDF**\nTarjeta: ${pdfData.cardName}\nSaldo: $${pdfData.totalBalance}\nVence: ${pdfData.dueDate}`;
+        // Podríamos agregar botón para guardar transacciones aquí en el futuro
       } else {
-        // Sin PDF, respuesta normal
-        responseText = await generateGeminiResponse(finalMessage, { debts, transactions, summary });
+        // LLAMADA NORMAL A GEMINI (AGENTE)
+        const result = await generateGeminiResponse(finalMessage, { debts, transactions, summary });
+        responseText = result.text;
+
+        // Ejecutar acción si existe
+        if (result.action) {
+          handleAgentAction(result.action);
+        }
       }
 
       const assistantMessage: AssistantMessage = {
@@ -196,24 +193,21 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error('Error:', error);
-      const errorMessage: AssistantMessage = {
-        id: (Date.now() + 1).toString(),
+      console.error(error);
+      const errMessage: AssistantMessage = {
+        id: Date.now().toString(),
         type: 'assistant',
-        content: 'Lo siento, hubo un error. Intenta de nuevo.',
-        timestamp: new Date().toISOString(),
+        content: 'Error al procesar tu solicitud.',
+        timestamp: new Date().toISOString()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, errMessage]);
     } finally {
       setIsTyping(false);
-      // Solo limpiar archivo si el análisis fue exitoso o hubo error definitivo
-      if (!attachedFile || !isPasswordResponse) {
-        setAttachedFile(null);
-      }
+      if (!attachedFile || !isPasswordResponse) setAttachedFile(null);
     }
   };
 
-  // Acción rápida
+  // Acción rápida reescrita
   const handleQuickAction = async (actionText: string) => {
     const userMessage: AssistantMessage = {
       id: Date.now().toString(),
@@ -225,11 +219,16 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
     setIsTyping(true);
 
     try {
-      const responseText = await generateGeminiResponse(actionText, { debts, transactions, summary });
+      const result = await generateGeminiResponse(actionText, { debts, transactions, summary });
+
+      if (result.action) {
+        handleAgentAction(result.action);
+      }
+
       const assistantMessage: AssistantMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: responseText,
+        content: result.text,
         timestamp: new Date().toISOString(),
       };
       setMessages(prev => [...prev, assistantMessage]);
@@ -445,10 +444,19 @@ export function VirtualAssistant({ debts, transactions, summary }: VirtualAssist
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleQuickAction('¿Cuánto gastaré el próximo mes?')}
+                onClick={() => handleQuickAction('¿Cuántos ingresos tuve?')}
               >
-                <Calendar className="h-3 w-3 mr-1" />
-                Predicción
+                <TrendingUp className="h-3 w-3 mr-1" />
+                Ingresos
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearHistory}
+                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                title="Borrar historial"
+              >
+                <Trash2 className="h-3 w-3" />
               </Button>
             </div>
           </div>

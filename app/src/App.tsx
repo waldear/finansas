@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -27,20 +27,20 @@ import {
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useFinance } from '@/hooks/useFinance';
-import { Dashboard } from '@/sections/Dashboard';
-import { TransactionForm } from '@/sections/TransactionForm';
-import { TransactionList } from '@/sections/TransactionList';
-import { DebtManager } from '@/sections/DebtManager';
-import { Recommendations } from '@/sections/Recommendations';
-import { PDFUploader } from '@/sections/PDFUploader';
-import { DataExport } from '@/sections/DataExport';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { AuthSection } from '@/sections/AuthSection';
-import { CategoryManager } from '@/sections/CategoryManager';
-import { SavingsGoals } from '@/sections/SavingsGoals';
 import { useAuth } from '@/hooks/useAuth';
-import { VirtualAssistant } from '@/sections/VirtualAssistant';
-import { HistoryCharts } from '@/sections/HistoryCharts';
+import { ThemeToggle } from '@/components/ThemeToggle';
+const Dashboard = lazy(() => import('@/sections/Dashboard').then(m => ({ default: m.Dashboard })));
+const TransactionForm = lazy(() => import('@/sections/TransactionForm').then(m => ({ default: m.TransactionForm })));
+const TransactionList = lazy(() => import('@/sections/TransactionList').then(m => ({ default: m.TransactionList })));
+const DebtManager = lazy(() => import('@/sections/DebtManager').then(m => ({ default: m.DebtManager })));
+const Recommendations = lazy(() => import('@/sections/Recommendations').then(m => ({ default: m.Recommendations })));
+const PDFUploader = lazy(() => import('@/sections/PDFUploader').then(m => ({ default: m.PDFUploader })));
+const DataExport = lazy(() => import('@/sections/DataExport').then(m => ({ default: m.DataExport })));
+const AuthSection = lazy(() => import('@/sections/AuthSection').then(m => ({ default: m.AuthSection })));
+const CategoryManager = lazy(() => import('@/sections/CategoryManager').then(m => ({ default: m.CategoryManager })));
+const SavingsGoals = lazy(() => import('@/sections/SavingsGoals').then(m => ({ default: m.SavingsGoals })));
+const VirtualAssistant = lazy(() => import('@/sections/VirtualAssistant').then(m => ({ default: m.VirtualAssistant })));
+const HistoryCharts = lazy(() => import('@/sections/HistoryCharts').then(m => ({ default: m.HistoryCharts })));
 import type { AnalysisResult } from '@/services/pdfAnalyzer';
 import type { Transaction } from '@/types/finance';
 import './App.css';
@@ -168,7 +168,7 @@ function App() {
         <div className="flex flex-col gap-4 mt-8">
           <div className="px-4">
             <h2 className="text-lg font-bold flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
+              <img src="/favicon.png" alt="Logo" className="h-6 w-6 rounded-md shadow-sm" />
               Mi Control Financiero
             </h2>
           </div>
@@ -205,7 +205,9 @@ function App() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background">
-        <AuthSection />
+        <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+          <AuthSection />
+        </Suspense>
       </div>
     );
   }
@@ -221,7 +223,7 @@ function App() {
             <div className="flex items-center gap-4">
               {renderMobileMenu()}
               <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-                <Wallet className="h-6 w-6 text-primary" />
+                <img src="/favicon.png" alt="Logo" className="h-8 w-8 md:h-10 md:w-10 rounded-lg shadow-lg active:scale-95 transition-transform" />
                 Mi Control Financiero
               </h1>
             </div>
@@ -300,144 +302,147 @@ function App() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          {/* Desktop Navigation */}
-          <div className="hidden md:block">
-            <TabsList className="grid w-full grid-cols-8">
-              {menuItems.map((item) => (
-                <TabsTrigger key={item.id} value={item.id} className="flex items-center gap-2">
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
+        <Suspense fallback={<div className="flex pt-20 justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            {/* Desktop Navigation */}
+            <div className="hidden md:block">
+              <TabsList className="grid w-full grid-cols-8">
+                {menuItems.map((item) => (
+                  <TabsTrigger key={item.id} value={item.id} className="flex items-center gap-2">
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {/* Mobile Navigation - Simple Tabs */}
+            <div className="md:hidden">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="dashboard">
+                  <LayoutDashboard className="h-4 w-4" />
                 </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+                <TabsTrigger value="transactions">
+                  <PlusCircle className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="savings">
+                  <PiggyBank className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="assistant">
+                  <Bot className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          {/* Mobile Navigation - Simple Tabs */}
-          <div className="md:hidden">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="dashboard">
-                <LayoutDashboard className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="transactions">
-                <PlusCircle className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="savings">
-                <PiggyBank className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="assistant">
-                <Bot className="h-4 w-4" />
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
-            <Dashboard
-              summary={summary}
-              expensesByCategory={expensesByCategory}
-              upcomingPayments={upcomingPayments}
-            />
-          </TabsContent>
-
-          {/* Transactions Tab */}
-          <TabsContent value="transactions" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <TransactionForm
-                onAddTransaction={handleAddTransaction}
-                customCategories={customCategories}
+            {/* Dashboard Tab */}
+            <TabsContent value="dashboard" className="space-y-6">
+              <Dashboard
+                summary={summary}
+                expensesByCategory={expensesByCategory}
+                upcomingPayments={upcomingPayments}
               />
+            </TabsContent>
+
+            {/* Transactions Tab */}
+            <TabsContent value="transactions" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <TransactionForm
+                  onAddTransaction={handleAddTransaction}
+                  customCategories={customCategories}
+                />
+                <TransactionList
+                  transactions={transactions.slice(0, 5)}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onEditTransaction={handleEditTransaction}
+                  customCategories={customCategories}
+                />
+              </div>
+            </TabsContent>
+
+            {/* History Tab */}
+            <TabsContent value="history" className="space-y-6">
               <TransactionList
-                transactions={transactions.slice(0, 5)}
+                transactions={transactions}
                 onDeleteTransaction={handleDeleteTransaction}
                 onEditTransaction={handleEditTransaction}
                 customCategories={customCategories}
               />
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          {/* History Tab */}
-          <TabsContent value="history" className="space-y-6">
-            <TransactionList
-              transactions={transactions}
-              onDeleteTransaction={handleDeleteTransaction}
-              onEditTransaction={handleEditTransaction}
-              customCategories={customCategories}
-            />
-          </TabsContent>
+            {/* Charts Tab */}
+            <TabsContent value="charts" className="space-y-6">
+              <HistoryCharts
+                transactions={transactions}
+                debts={debts}
+              />
+            </TabsContent>
 
-          {/* Charts Tab */}
-          <TabsContent value="charts" className="space-y-6">
-            <HistoryCharts
-              transactions={transactions}
-              debts={debts}
-            />
-          </TabsContent>
+            {/* Debts Tab */}
+            <TabsContent value="debts" className="space-y-6">
+              <DebtManager
+                debts={debts}
+                onAddDebt={handleAddDebt}
+                onDeleteDebt={handleDeleteDebt}
+                onUpdatePayment={handleUpdatePayment}
+              />
+            </TabsContent>
 
-          {/* Debts Tab */}
-          <TabsContent value="debts" className="space-y-6">
-            <DebtManager
-              debts={debts}
-              onAddDebt={handleAddDebt}
-              onDeleteDebt={handleDeleteDebt}
-              onUpdatePayment={handleUpdatePayment}
-            />
-          </TabsContent>
+            {/* Savings Goals Tab */}
+            <TabsContent value="savings" className="space-y-6">
+              <SavingsGoals
+                goals={savingsGoals}
+                availableBalance={summary.balance}
+                onAddGoal={addSavingsGoal}
+                onDeleteGoal={deleteSavingsGoal}
+                onContribute={contributeToGoal}
+              />
+            </TabsContent>
 
-          {/* Savings Goals Tab */}
-          <TabsContent value="savings" className="space-y-6">
-            <SavingsGoals
-              goals={savingsGoals}
-              availableBalance={summary.balance}
-              onAddGoal={addSavingsGoal}
-              onDeleteGoal={deleteSavingsGoal}
-              onContribute={contributeToGoal}
-            />
-          </TabsContent>
+            {/* PDF Analyzer Tab */}
+            <TabsContent value="pdf" className="space-y-6">
+              <PDFUploader
+                onAnalysisComplete={handleAnalysisComplete}
+                availableFunds={summary.balance}
+              />
+            </TabsContent>
 
-          {/* PDF Analyzer Tab */}
-          <TabsContent value="pdf" className="space-y-6">
-            <PDFUploader
-              onAnalysisComplete={handleAnalysisComplete}
-              availableFunds={summary.balance}
-            />
-          </TabsContent>
+            {/* Assistant Tab */}
+            <TabsContent value="assistant" className="space-y-6">
+              <VirtualAssistant
+                debts={debts}
+                transactions={transactions}
+                summary={summary}
+                onAddTransaction={addTransaction}
+              />
+            </TabsContent>
 
-          {/* Assistant Tab */}
-          <TabsContent value="assistant" className="space-y-6">
-            <VirtualAssistant
-              debts={debts}
-              transactions={transactions}
-              summary={summary}
-            />
-          </TabsContent>
+            {/* Categories Tab */}
+            <TabsContent value="categories" className="space-y-6">
+              <CategoryManager
+                customCategories={customCategories}
+                onAddCategory={addCustomCategory}
+                onDeleteCategory={deleteCustomCategory}
+                onEditCategory={editCustomCategory}
+              />
+            </TabsContent>
 
-          {/* Categories Tab */}
-          <TabsContent value="categories" className="space-y-6">
-            <CategoryManager
-              customCategories={customCategories}
-              onAddCategory={addCustomCategory}
-              onDeleteCategory={deleteCustomCategory}
-              onEditCategory={editCustomCategory}
-            />
-          </TabsContent>
+            {/* Export Tab */}
+            <TabsContent value="export" className="space-y-6">
+              <DataExport
+                transactions={transactions}
+                debts={debts}
+              />
+            </TabsContent>
 
-          {/* Export Tab */}
-          <TabsContent value="export" className="space-y-6">
-            <DataExport
-              transactions={transactions}
-              debts={debts}
-            />
-          </TabsContent>
-
-          {/* Recommendations Tab */}
-          <TabsContent value="recommendations" className="space-y-6">
-            <Recommendations
-              recommendations={recommendations}
-              summary={summary}
-            />
-          </TabsContent>
-        </Tabs>
+            {/* Recommendations Tab */}
+            <TabsContent value="recommendations" className="space-y-6">
+              <Recommendations
+                recommendations={recommendations}
+                summary={summary}
+              />
+            </TabsContent>
+          </Tabs>
+        </Suspense>
       </main>
 
       {/* Footer */}
