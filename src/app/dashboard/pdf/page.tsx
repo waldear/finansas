@@ -1,5 +1,6 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
 import { PDFUploader } from '@/components/pdf/pdf-uploader';
 import { useTransactions } from '@/hooks/use-transactions';
 import { useFinance } from '@/hooks/use-finance';
