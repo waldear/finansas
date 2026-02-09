@@ -13,7 +13,6 @@ import {
     TrendingUp,
     TrendingDown,
     Menu,
-    FileText,
     Bot,
     BarChart3,
     Download,
