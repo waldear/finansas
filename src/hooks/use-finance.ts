@@ -8,7 +8,7 @@ export function useFinance() {
     const debtsQuery = useQuery({
         queryKey: ['debts'],
         queryFn: async () => {
-            const res = await fetch('/api/debts');
+            const res = await fetch('/api/debts', { credentials: 'include' });
             if (!res.ok) throw new Error('Error al cargar deudas');
             return res.json() as Promise<Debt[]>;
         },
@@ -17,7 +17,7 @@ export function useFinance() {
     const goalsQuery = useQuery({
         queryKey: ['savings'],
         queryFn: async () => {
-            const res = await fetch('/api/savings');
+            const res = await fetch('/api/savings', { credentials: 'include' });
             if (!res.ok) throw new Error('Error al cargar metas');
             return res.json() as Promise<SavingsGoal[]>;
         },

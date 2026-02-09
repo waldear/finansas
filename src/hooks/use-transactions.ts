@@ -8,7 +8,7 @@ export function useTransactions() {
     const transactionsQuery = useQuery({
         queryKey: ['transactions'],
         queryFn: async () => {
-            const res = await fetch('/api/transactions');
+            const res = await fetch('/api/transactions', { credentials: 'include' });
             if (!res.ok) throw new Error('Error al cargar transacciones');
             return res.json() as Promise<Transaction[]>;
         },
