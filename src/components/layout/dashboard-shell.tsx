@@ -36,7 +36,6 @@ const menuItems = [
     { id: 'charts', label: 'Gráficos', icon: BarChart3, href: '/dashboard/charts' },
     { id: 'debts', label: 'Deudas', icon: CreditCard, href: '/dashboard/debts' },
     { id: 'savings', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
-    { id: 'pdf', label: 'Analizar PDF', icon: FileText, href: '/dashboard/pdf' },
     { id: 'assistant', label: 'Asistente', icon: Bot, href: '/dashboard/assistant' },
 ];
 

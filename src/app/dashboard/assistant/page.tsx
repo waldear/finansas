@@ -66,15 +66,22 @@ export default function AssistantPage() {
                     <ScrollArea className="h-full p-4">
                         <div className="space-y-4">
                             {messages.length === 0 && (
-                                <div className="text-center py-10 text-muted-foreground">
-                                    <p>¡Hola! Soy tu asistente financiero. ¿En qué puedo ayudarte hoy?</p>
+                                <div className="text-center py-10 space-y-4">
+                                    <Bot className="h-12 w-12 text-primary mx-auto opacity-50" />
+                                    <div className="space-y-2">
+                                        <p className="font-medium">¡Hola! Soy tu asistente financiero.</p>
+                                        <p className="text-sm text-muted-foreground px-4">
+                                            ¿Tienes un resumen bancario o de tarjeta que no entiendes? <br />
+                                            Dime "Tengo un resumen" y te ayudaré a auditarlo paso a paso.
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                             {messages.map((m, i) => (
                                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[80%] p-3 rounded-2xl ${m.role === 'user'
-                                            ? 'bg-primary text-primary-foreground rounded-tr-none'
-                                            : 'bg-muted rounded-tl-none'
+                                        ? 'bg-primary text-primary-foreground rounded-tr-none'
+                                        : 'bg-muted rounded-tl-none'
                                         }`}>
                                         <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                                     </div>
