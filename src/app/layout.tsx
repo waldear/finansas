@@ -7,8 +7,8 @@ import { Toaster } from 'sonner';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-    title: 'Mi Control Financiero',
-    description: 'Gestiona tus finanzas de forma inteligente',
+    title: 'Nano Banana',
+    description: 'Gestiona tus finanzas de forma inteligente y divertida',
 };
 
 export default function RootLayout({

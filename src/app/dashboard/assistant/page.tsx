@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Bot, Send, User, Loader2 } from 'lucide-react';
 import { useFinance } from '@/hooks/use-finance';
 import { useTransactions } from '@/hooks/use-transactions';
+import { NanoBananaLogo } from '@/components/ui/nano-banana-logo';
 
 export default function AssistantPage() {
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
@@ -67,7 +68,7 @@ export default function AssistantPage() {
                         <div className="space-y-4">
                             {messages.length === 0 && (
                                 <div className="text-center py-10 space-y-4">
-                                    <Bot className="h-12 w-12 text-primary mx-auto opacity-50" />
+                                    <NanoBananaLogo className="h-20 w-20 mx-auto" />
                                     <div className="space-y-2">
                                         <p className="font-medium">¡Hola! Soy tu asistente financiero.</p>
                                         <p className="text-sm text-muted-foreground px-4">

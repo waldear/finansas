@@ -27,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase-browser';
+import { NanoBananaLogo } from '@/components/ui/nano-banana-logo';
 
 const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
@@ -64,8 +65,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                                 <div className="flex flex-col h-full">
                                     <div className="p-6 border-b">
                                         <h2 className="text-lg font-bold flex items-center gap-2">
-                                            <Wallet className="h-6 w-6 text-primary" />
-                                            Control Financiero
+                                            <NanoBananaLogo className="h-8 w-8" />
+                                            Nano Banana
                                         </h2>
                                     </div>
                                     <nav className="flex-1 p-4 space-y-1">
@@ -94,9 +95,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                                 </div>
                             </SheetContent>
                         </Sheet>
-                        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent flex items-center gap-2">
-                            <Wallet className="h-6 w-6 text-primary" />
-                            <span className="hidden sm:inline">Mi Control Financiero</span>
+                        <h1 className="text-xl font-bold flex items-center gap-2">
+                            <NanoBananaLogo className="h-10 w-10" />
+                            <span className="bg-gradient-to-r from-yellow-400 to-amber-600 bg-clip-text text-transparent hidden sm:inline">Nano Banana</span>
                         </h1>
                     </div>
 
