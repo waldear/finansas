@@ -150,6 +150,7 @@ export default function ChartsPage() {
                         {Object.entries(categoryData).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([cat, val], idx) => (
                             <div key={cat} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
+                                    {/* eslint-disable-next-line react/forbid-dom-props */}
                                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                                     <span className="text-sm font-medium">{cat}</span>
                                 </div>

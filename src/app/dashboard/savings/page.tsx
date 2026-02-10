@@ -44,6 +44,7 @@ export default function SavingsPage() {
                                         <div key={goal.id} className="p-4 border rounded-xl space-y-4 bg-card hover:shadow-md transition-shadow">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-3">
+                                                    {/* eslint-disable-next-line react/forbid-dom-props */}
                                                     <div className="p-2 rounded-full bg-primary/10 text-primary" style={{ backgroundColor: `${goal.color}20`, color: goal.color }}>
                                                         <PiggyBank className="w-5 h-5" />
                                                     </div>
@@ -53,6 +54,7 @@ export default function SavingsPage() {
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
+                                                    {/* eslint-disable-next-line react/forbid-dom-props */}
                                                     <p className="font-bold text-lg" style={{ color: goal.color }}>{Math.round(progress)}%</p>
                                                 </div>
                                             </div>
@@ -62,6 +64,7 @@ export default function SavingsPage() {
                                                     <span className="text-muted-foreground">Progreso</span>
                                                     <span className="font-medium">{formatCurrency(goal.current_amount)} / {formatCurrency(goal.target_amount)}</span>
                                                 </div>
+                                                {/* eslint-disable-next-line react/forbid-dom-props */}
                                                 <Progress value={progress} className="h-3" style={{ '--progress-foreground': goal.color } as React.CSSProperties} />
                                             </div>
 

@@ -22,7 +22,8 @@ import {
     PiggyBank,
     RefreshCw,
     Settings,
-    X
+    X,
+    Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -31,12 +32,13 @@ import { FinFlowLogo } from '@/components/ui/finflow-logo';
 
 const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+    { id: 'copilot', label: 'Copiloto AI', icon: Sparkles, href: '/dashboard/copilot' },
     { id: 'transactions', label: 'Transacciones', icon: PlusCircle, href: '/dashboard/transactions' },
     { id: 'history', label: 'Historial', icon: List, href: '/dashboard/history' },
     { id: 'charts', label: 'Gráficos', icon: BarChart3, href: '/dashboard/charts' },
     { id: 'debts', label: 'Deudas', icon: CreditCard, href: '/dashboard/debts' },
     { id: 'savings', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
-    { id: 'assistant', label: 'Asistente', icon: Bot, href: '/dashboard/assistant' },
+    { id: 'assistant', label: 'Chat Asistente', icon: Bot, href: '/dashboard/assistant' },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
