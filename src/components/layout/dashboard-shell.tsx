@@ -27,7 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase-browser';
-import { NanoBananaLogo } from '@/components/ui/nano-banana-logo';
+import { FinFlowLogo } from '@/components/ui/finflow-logo';
 
 const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
@@ -65,8 +65,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                                 <div className="flex flex-col h-full">
                                     <div className="p-6 border-b">
                                         <h2 className="text-lg font-bold flex items-center gap-2">
-                                            <NanoBananaLogo className="h-8 w-8" />
-                                            Nano Banana
+                                            <FinFlowLogo className="h-8 w-8" />
+                                            FinFlow
                                         </h2>
                                     </div>
                                     <nav className="flex-1 p-4 space-y-1">
@@ -96,8 +96,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                             </SheetContent>
                         </Sheet>
                         <h1 className="text-xl font-bold flex items-center gap-2">
-                            <NanoBananaLogo className="h-10 w-10" />
-                            <span className="bg-gradient-to-r from-yellow-400 to-amber-600 bg-clip-text text-transparent hidden sm:inline">Nano Banana</span>
+                            <FinFlowLogo className="h-10 w-10" />
+                            <span className="bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent hidden sm:inline">FinFlow</span>
                         </h1>
                     </div>
 

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, UserPlus, LogIn, Wallet } from 'lucide-react';
+import { Loader2, Mail, Lock, UserPlus, LogIn, Wallet, Chrome } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AuthPage() {
@@ -133,6 +133,21 @@ export default function AuthPage() {
         setIsLoading(false);
     };
 
+    const handleGoogleLogin = async () => {
+        setIsLoading(true);
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+
+        if (error) {
+            setError(error.message);
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-background">
             <Card className="w-full max-w-md shadow-xl border-t-4 border-t-primary">
@@ -140,9 +155,9 @@ export default function AuthPage() {
                     <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                         <Wallet className="h-6 w-6 text-primary" />
                     </div>
-                    <CardTitle className="text-2xl font-bold tracking-tight">Mi Control Financiero</CardTitle>
+                    <CardTitle className="text-2xl font-bold tracking-tight">FinFlow</CardTitle>
                     <CardDescription>
-                        Gestiona tus finanzas de forma segura y eficiente
+                        Gestiona tus finanzas de forma inteligente y fluida
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -169,6 +184,27 @@ export default function AuthPage() {
                                 <AlertDescription className="text-emerald-800">{successMessage}</AlertDescription>
                             </Alert>
                         )}
+
+                        <div className="mt-6 mb-4">
+                            <Button
+                                variant="outline"
+                                type="button"
+                                className="w-full flex items-center gap-2"
+                                onClick={handleGoogleLogin}
+                                disabled={isLoading}
+                            >
+                                <Chrome className="h-4 w-4" />
+                                Continuar con Google
+                            </Button>
+                            <div className="relative my-4">
+                                <div className="absolute inset-0 flex items-center">
+                                    <span className="w-full border-t" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-background px-2 text-muted-foreground">O</span>
+                                </div>
+                            </div>
+                        </div>
 
                         <TabsContent value="login">
                             <div className="flex flex-col gap-4 mt-4">
