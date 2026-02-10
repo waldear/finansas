@@ -44,7 +44,7 @@ export default function SavingsPage() {
                                         <div key={goal.id} className="p-4 border rounded-xl space-y-4 bg-card hover:shadow-md transition-shadow">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="p-2 rounded-full" style={{ backgroundColor: `${goal.color}20`, color: goal.color }}>
+                                                    <div className="p-2 rounded-full bg-primary/10 text-primary" style={{ backgroundColor: `${goal.color}20`, color: goal.color }}>
                                                         <PiggyBank className="w-5 h-5" />
                                                     </div>
                                                     <div>
@@ -62,7 +62,7 @@ export default function SavingsPage() {
                                                     <span className="text-muted-foreground">Progreso</span>
                                                     <span className="font-medium">{formatCurrency(goal.current_amount)} / {formatCurrency(goal.target_amount)}</span>
                                                 </div>
-                                                <Progress value={progress} className="h-3" style={{ '--progress-foreground': goal.color } as any} />
+                                                <Progress value={progress} className="h-3" style={{ '--progress-foreground': goal.color } as React.CSSProperties} />
                                             </div>
 
                                             {goal.deadline && (
