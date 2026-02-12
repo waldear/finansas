@@ -5,8 +5,8 @@ import { NextResponse } from 'next/server';
 export async function GET() {
     const supabase = await createClient();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { data, error } = await supabase
         .from('transactions')
@@ -21,8 +21,8 @@ export async function GET() {
 export async function POST(req: Request) {
     const supabase = await createClient();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
         const body = await req.json();
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
         const { data, error } = await supabase
             .from('transactions')
-            .insert([{ ...validatedData, user_id: user.id }])
+            .insert([{ ...validatedData, user_id: session.user.id }])
             .select()
             .single();
 
