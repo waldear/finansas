@@ -121,10 +121,18 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
                         {!health.db.obligations_table && (
                             <Alert className="bg-blue-50 border-blue-200 text-blue-800">
                                 <Database className="h-4 w-4" />
-                                <AlertTitle>Tablas Faltantes</AlertTitle>
+                                <AlertTitle>Tablas Faltantes o Error de Conexión</AlertTitle>
                                 <AlertDescription>
-                                    <p className="mb-2">La base de datos no tiene las tablas necesarias (obligations, documents).</p>
-                                    <p className="text-sm mb-2">Ejecuta el siguiente SQL en el editor de Supabase:</p>
+                                    <p className="mb-2">La base de datos no tiene las tablas necesarias o hay un problema de permisos.</p>
+
+                                    {(health as any).debug && (
+                                        <div className="bg-white/50 p-2 rounded text-[10px] font-mono mb-2 border border-blue-100">
+                                            <p>Error: {(health as any).debug.obligations_error || 'Desconocido'}</p>
+                                            <p>URL: {(health as any).debug.url}</p>
+                                        </div>
+                                    )}
+
+                                    <p className="text-sm mb-2">Si ya ejecutaste el SQL, asegúrate de que el proyecto en Vercel use la misma URL de Supabase que actualizaste.</p>
                                     <div className="bg-slate-950 text-slate-50 p-3 rounded-md text-xs font-mono overflow-x-auto">
                                         No te preocupes, el archivo <code>supabase-copilot.sql</code> ya está en tu proyecto. Copia su contenido y pégalo en el SQL Editor de Supabase.
                                     </div>

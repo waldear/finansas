@@ -75,7 +75,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* <NotificationCenter /> - Temporarily disabled for debugging */}
+                        <NotificationCenter />
                     </div>
                 </div>
             </header>
