@@ -98,7 +98,7 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
                                 <AlertDescription>
                                     <p className="mb-2">No encontramos la API Key en tu archivo <code>.env.local</code>.</p>
                                     <ol className="list-decimal list-inside text-sm space-y-1 ml-2">
-                                        <li>Consigue una key gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.</li>
+                                        <li>Consigue una key gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-bold">Google AI Studio</a>.</li>
                                         <li>Abre el archivo <code>.env.local</code> en la raíz de tu proyecto.</li>
                                         <li>Añade una línea: <code>GEMINI_API_KEY="tu_key_aqui"</code></li>
                                         <li>Reinicia el servidor (si estás en local).</li>

@@ -65,7 +65,15 @@ export default function ChartsPage() {
     const pieData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
     const barData = Object.values(monthlyData).reverse().slice(-6); // Last 6 months
 
-    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const CHART_CONFIG = [
+        { hex: '#3b82f6', className: 'bg-blue-500' },
+        { hex: '#10b981', className: 'bg-emerald-500' },
+        { hex: '#f59e0b', className: 'bg-amber-500' },
+        { hex: '#ef4444', className: 'bg-red-500' },
+        { hex: '#8b5cf6', className: 'bg-violet-500' },
+        { hex: '#ec4899', className: 'bg-pink-500' },
+        { hex: '#06b6d4', className: 'bg-cyan-500' }
+    ];
 
     return (
         <div className="space-y-6">
@@ -125,7 +133,7 @@ export default function ChartsPage() {
                                             dataKey="value"
                                         >
                                             {pieData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                <Cell key={`cell-${index}`} fill={CHART_CONFIG[index % CHART_CONFIG.length].hex} />
                                             ))}
                                         </Pie>
                                         <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
@@ -150,8 +158,7 @@ export default function ChartsPage() {
                         {Object.entries(categoryData).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([cat, val], idx) => (
                             <div key={cat} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    {/* eslint-disable-next-line react/forbid-dom-props */}
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                                    <div className={`w-3 h-3 rounded-full ${CHART_CONFIG[idx % CHART_CONFIG.length].className}`} />
                                     <span className="text-sm font-medium">{cat}</span>
                                 </div>
                                 <span className="text-sm font-bold">{formatCurrency(val)}</span>

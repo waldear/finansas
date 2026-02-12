@@ -133,12 +133,10 @@ export default function DashboardPage() {
                             <span className="opacity-60">Límite: {formatCurrency(450000)}</span>
                             <span>{Math.round((totalExpenses / 450000) * 100)}%</span>
                         </div>
-                        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-primary neon-glow transition-all duration-1000"
-                                style={{ width: `${Math.min((totalExpenses / 450000) * 100, 100)}%` }}
-                            />
-                        </div>
+                        <Progress
+                            value={(totalExpenses / 450000) * 100}
+                            className="h-2 [&>div]:neon-glow"
+                        />
                     </div>
                 </Card>
             </div>

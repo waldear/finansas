@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
+import { sanitizeEnv } from '@/lib/utils';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const genAI = new GoogleGenerativeAI(sanitizeEnv(process.env.GEMINI_API_KEY));
 
 import { createClient } from '@/lib/supabase-server';
 
