@@ -1,4 +1,4 @@
-import { useQueries } from '@tanstack/react-query';
+import { keepPreviousData, useQueries } from '@tanstack/react-query';
 
 export function useDashboard() {
     const results = useQueries({
@@ -11,6 +11,7 @@ export function useDashboard() {
                     return res.json();
                 },
                 staleTime: 5 * 60 * 1000, // 5 minutes
+                placeholderData: keepPreviousData,
             },
             {
                 queryKey: ['savings'],
@@ -20,6 +21,7 @@ export function useDashboard() {
                     return res.json();
                 },
                 staleTime: 5 * 60 * 1000,
+                placeholderData: keepPreviousData,
             },
             {
                 queryKey: ['transactions'],
@@ -29,6 +31,7 @@ export function useDashboard() {
                     return res.json();
                 },
                 staleTime: 2 * 60 * 1000, // 2 minutes (transactions change more often)
+                placeholderData: keepPreviousData,
             },
         ],
     });

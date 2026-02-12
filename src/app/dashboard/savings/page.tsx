@@ -12,7 +12,7 @@ const GoalIcon = ({ style, children, className }: any) => React.createElement('d
 const GoalBadge = ({ style, children, className }: any) => React.createElement('p', { style, className }, children);
 
 export default function SavingsPage() {
-    const { savingsGoals, isLoadingGoals } = useFinance();
+    const { savingsGoals, isLoadingGoals, goalsError } = useFinance();
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -89,6 +89,7 @@ export default function SavingsPage() {
                     </CardContent>
                 </Card>
             </div>
+            {goalsError && <p className="text-sm text-destructive">Error de metas: {goalsError}</p>}
         </div>
     );
 }

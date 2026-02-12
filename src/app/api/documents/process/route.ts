@@ -1,143 +1,156 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase-server';
+import { sanitizeEnv } from '@/lib/utils';
+import { ALLOWED_DOCUMENT_MIME_TYPES, extractFinancialDocument } from '@/lib/document-processing';
+import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase-server";
-import { sanitizeEnv } from "@/lib/utils";
-
-// Schema for the extraction result
-const extractionSchema = `
-{
-  "total_amount": number,
-  "currency": string (e.g., "ARS", "USD"),
-  "due_date": string (YYYY-MM-DD),
-  "minimum_payment": number (nullable),
-  "items": [
-    {
-      "description": string,
-      "amount": number,
-      "date": string (YYYY-MM-DD)
-    }
-  ],
-  "type": string ("credit_card", "invoice", "bank_statement", "other"),
-  "merchant": string (nullable)
+async function extractInline(file: File, apiKey: string) {
+    const arrayBuffer = await file.arrayBuffer();
+    return extractFinancialDocument({
+        apiKey,
+        mimeType: file.type,
+        base64Data: Buffer.from(arrayBuffer).toString('base64'),
+    });
 }
-`;
 
 export async function POST(req: Request) {
+    const context = createRequestContext('/api/documents/process', 'POST');
+    const startedAt = Date.now();
+
     try {
         const formData = await req.formData();
-        const file = formData.get("file") as File;
+        const file = formData.get('file') as File;
 
         if (!file) {
-            return NextResponse.json({ error: "No file provided" }, { status: 400 });
+            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
 
-        // 1. Authenticate user
-        const supabase = await createClient();
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        if (!ALLOWED_DOCUMENT_MIME_TYPES.has(file.type)) {
+            return NextResponse.json({ error: 'Tipo de archivo no soportado' }, { status: 400 });
         }
 
-        // 2. Upload to Supabase Storage
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-            .from("documents")
-            .upload(fileName, file);
-
-        if (uploadError) {
-            console.error("Upload error:", uploadError);
+        const apiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
+        if (!apiKey) {
             return NextResponse.json(
-                { error: "Failed to upload document" },
+                { error: 'Falta GEMINI_API_KEY en el entorno de ejecución' },
                 { status: 500 }
             );
         }
 
-        // Get public URL (or signed URL if private)
-        const { data: { publicUrl } } = supabase.storage
-            .from("documents")
-            .getPublicUrl(fileName);
+        const supabase = await createClient();
+        if (!supabase) {
+            return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
+        }
 
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-        // 3. Process with Gemini
-        const apiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const safeOriginalName = file.name.replace(/[^\w.-]/g, '_');
+        const filePath = `${user.id}/${Date.now()}-${safeOriginalName}`;
 
-        const arrayBuffer = await file.arrayBuffer();
-        const base64Data = Buffer.from(arrayBuffer).toString("base64");
-
-        const prompt = `
-      You are a financial data extraction expert. 
-      Analyze this document (image or PDF) and extract the key financial information.
-      Return ONLY a valid JSON object matching this schema:
-      ${extractionSchema}
-
-      If a field is not found, use null.
-      For "items", extract the 5 largest transactions if there are many.
-      Ensure the currency is correct (default to ARS if not specified but looks like Argentine Peso).
-      Date format must be YYYY-MM-DD.
-    `;
-
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: base64Data,
-                    mimeType: file.type,
-                },
-            },
-        ]);
-
-        const response = await result.response;
-        const text = response.text();
-
-        // Clean code fences if present
-        const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const extractionData = JSON.parse(cleanJson);
-
-        // 4. Save metadata to DB
-        // Insert document record
-        const { data: docData, error: docError } = await supabase
+        const { error: uploadError } = await supabase.storage
             .from('documents')
+            .upload(filePath, file, { contentType: file.type, upsert: false });
+
+        if (uploadError) {
+            logWarn('document_upload_failed_fallback_inline', {
+                ...context,
+                userId: user.id,
+                reason: uploadError.message,
+            });
+            try {
+                const extractionData = await extractInline(file, apiKey);
+                return NextResponse.json({
+                    success: true,
+                    data: extractionData,
+                    warning: `Se analizó el archivo sin Storage (${uploadError.message}).`,
+                });
+            } catch (inlineError) {
+                logError('document_upload_and_inline_extraction_failed', inlineError, {
+                    ...context,
+                    userId: user.id,
+                    uploadError: uploadError.message,
+                });
+                return NextResponse.json(
+                    {
+                        error: 'No se pudo procesar el documento.',
+                        details: `Storage: ${uploadError.message}`,
+                        hint: 'Revisa bucket/policies de documents y GEMINI_API_KEY.',
+                    },
+                    { status: 500 }
+                );
+            }
+        }
+
+        const { data: job, error: jobError } = await supabase
+            .from('document_jobs')
             .insert({
                 user_id: user.id,
-                url: publicUrl,
-                type: extractionData.type || 'other',
-                status: 'processed'
+                file_path: filePath,
+                original_name: file.name,
+                mime_type: file.type,
+                status: 'queued',
             })
-            .select()
+            .select('id, status, created_at')
             .single();
 
-        if (docError) {
-            console.error("DB Error (Elements):", docError);
-            // Continue anyway to return result to UI, but log error
+        if (jobError) {
+            logWarn('document_job_create_failed_fallback_inline', {
+                ...context,
+                userId: user.id,
+                reason: jobError.message,
+            });
+            try {
+                const extractionData = await extractInline(file, apiKey);
+                return NextResponse.json({
+                    success: true,
+                    data: extractionData,
+                    warning: `Se analizó el archivo sin cola asíncrona (${jobError.message}).`,
+                });
+            } catch (inlineError) {
+                logError('document_job_create_and_inline_extraction_failed', inlineError, {
+                    ...context,
+                    userId: user.id,
+                    jobError: jobError.message,
+                });
+                return NextResponse.json(
+                    {
+                        error: 'No se pudo crear el job ni procesar en modo directo.',
+                        details: jobError.message,
+                        hint: 'Ejecuta supabase-advanced.sql para habilitar la cola document_jobs.',
+                    },
+                    { status: 500 }
+                );
+            }
         }
 
-        // Insert extraction record
-        if (docData) {
-            await supabase
-                .from('extractions')
-                .insert({
-                    document_id: docData.id,
-                    raw_json: extractionData,
-                    confidence_score: 1.0, // Mock score for now
-                    manual_verification_needed: false
-                });
-        }
+        logInfo('document_job_enqueued', {
+            ...context,
+            userId: user.id,
+            jobId: job.id,
+            mimeType: file.type,
+            durationMs: Date.now() - startedAt,
+        });
 
         return NextResponse.json({
             success: true,
-            data: extractionData,
-            documentId: docData?.id
+            jobId: job.id,
+            status: job.status,
+            queuedAt: job.created_at,
         });
-
-    } catch (error: any) {
-        console.error("Processing error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        logError('document_process_enqueue_exception', error, {
+            ...context,
+            durationMs: Date.now() - startedAt,
+        });
+        return NextResponse.json(
+            {
+                error: 'No pudimos encolar el documento.',
+                details: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 }
+        );
     }
 }

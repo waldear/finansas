@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Transaction } from '@/lib/schemas';
 import { toast } from 'sonner';
 
@@ -9,9 +9,12 @@ export function useTransactions() {
         queryKey: ['transactions'],
         queryFn: async () => {
             const res = await fetch('/api/transactions', { credentials: 'include' });
-            if (!res.ok) throw new Error('Error al cargar transacciones');
-            return res.json() as Promise<Transaction[]>;
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'Error al cargar transacciones');
+            return (body || []) as Transaction[];
         },
+        staleTime: 5 * 60 * 1000,
+        placeholderData: keepPreviousData,
     });
 
     const addTransaction = useMutation({
@@ -19,10 +22,12 @@ export function useTransactions() {
             const res = await fetch('/api/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(newTransaction),
             });
-            if (!res.ok) throw new Error('Error al agregar transacción');
-            return res.json();
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'Error al agregar transacción');
+            return body;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -36,6 +41,7 @@ export function useTransactions() {
     return {
         transactions: transactionsQuery.data || [],
         isLoading: transactionsQuery.isLoading,
+        error: transactionsQuery.error instanceof Error ? transactionsQuery.error.message : null,
         addTransaction: addTransaction.mutate,
         isAdding: addTransaction.isPending,
     };

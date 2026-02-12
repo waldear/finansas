@@ -11,9 +11,9 @@ import { useFinance } from '@/hooks/use-finance';
 import { Loader2 } from 'lucide-react';
 
 export function SavingsForm() {
-    const { addGoal } = useFinance();
+    const { addGoal, isAddingGoal } = useFinance();
 
-    const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<SavingsGoal>({
+    const { register, handleSubmit, reset, formState: { errors } } = useForm<SavingsGoal>({
         resolver: zodResolver(SavingsGoalSchema),
         defaultValues: {
             current_amount: 0,
@@ -24,8 +24,17 @@ export function SavingsForm() {
     });
 
     const onSubmit = async (data: SavingsGoal) => {
-        await addGoal(data);
-        reset();
+        try {
+            await addGoal(data);
+            reset({
+                current_amount: 0,
+                color: '#3b82f6',
+                icon: 'piggy-bank',
+                category: 'Ahorro',
+            });
+        } catch {
+            // Error feedback is already handled by the mutation hook.
+        }
     };
 
     return (
@@ -76,8 +85,8 @@ export function SavingsForm() {
                         </div>
                     </div>
 
-                    <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    <Button type="submit" className="w-full" disabled={isAddingGoal}>
+                        {isAddingGoal ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                         Crear Meta
                     </Button>
                 </form>

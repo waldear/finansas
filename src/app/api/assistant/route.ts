@@ -1,17 +1,21 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 import { sanitizeEnv } from '@/lib/utils';
-
-const genAI = new GoogleGenerativeAI(sanitizeEnv(process.env.GEMINI_API_KEY));
-
 import { createClient } from '@/lib/supabase-server';
+import { createRequestContext, logError, logInfo } from '@/lib/observability';
 
 export async function POST(req: Request) {
+  const logContext = createRequestContext('/api/assistant', 'POST');
+  const startedAt = Date.now();
   const supabase = await createClient();
+  if (!supabase) return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  if (!process.env.GEMINI_API_KEY) {
+  const geminiApiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
+
+  if (!geminiApiKey) {
     return NextResponse.json({
       text: "El sistema de IA no está configurado (Falta la API Key). Por favor, contacta al administrador del sistema o configura la variable GEMINI_API_KEY."
     });
@@ -20,7 +24,7 @@ export async function POST(req: Request) {
   try {
     const { message, context } = await req.json();
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const systemPrompt = `
@@ -55,9 +59,21 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
+    logInfo('assistant_response_generated', {
+      ...logContext,
+      userId: user.id,
+      messageLength: typeof message === 'string' ? message.length : 0,
+      transactionsInContext: Array.isArray(context?.transactions) ? context.transactions.length : 0,
+      durationMs: Date.now() - startedAt,
+    });
+
     return NextResponse.json({ text });
   } catch (error: any) {
-    console.error("AI Error:", error);
+    logError("assistant_exception", error, {
+      ...logContext,
+      userId: user.id,
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ text: "Lo siento, tuve un problema al procesar tu solicitud. Intenta de nuevo más tarde." });
   }
 }

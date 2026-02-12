@@ -3,13 +3,17 @@
 export const dynamic = 'force-dynamic';
 import { useTransactions } from '@/hooks/use-transactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, ArrowUpCircle, ArrowDownCircle, Search } from 'lucide-react';
+import { Loader2, ArrowUpCircle, ArrowDownCircle, Search, FileDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 export default function HistoryPage() {
     const { transactions, isLoading } = useTransactions();
     const [searchTerm, setSearchTerm] = useState('');
+    const [isExportingCsv, setIsExportingCsv] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
 
     const filteredTransactions = transactions.filter((t: any) =>
         t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -26,6 +30,69 @@ export default function HistoryPage() {
 
     const balance = totalIncome - totalExpense;
 
+    const exportCsv = () => {
+        try {
+            setIsExportingCsv(true);
+            const headers = ['Fecha', 'Tipo', 'Categoria', 'Descripcion', 'Monto'];
+            const rows = filteredTransactions.map((transaction: any) => ([
+                transaction.date,
+                transaction.type,
+                transaction.category,
+                transaction.description,
+                String(transaction.amount),
+            ]));
+
+            const csvContent = [headers, ...rows]
+                .map((row) => row.map((column) => `"${String(column).replaceAll('"', '""')}"`).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `finansas-historial-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+            toast.success('CSV exportado correctamente');
+        } catch (error) {
+            toast.error('No pudimos exportar el CSV');
+        } finally {
+            setIsExportingCsv(false);
+        }
+    };
+
+    const exportPdf = async () => {
+        try {
+            setIsExportingPdf(true);
+            const { jsPDF } = await import('jspdf');
+            const doc = new jsPDF();
+            const title = `Historial Finansas - ${new Date().toLocaleDateString('es-AR')}`;
+            doc.setFontSize(14);
+            doc.text(title, 10, 12);
+            doc.setFontSize(10);
+
+            let y = 22;
+            filteredTransactions.forEach((transaction: any, index: number) => {
+                const line = `${transaction.date} | ${transaction.type.toUpperCase()} | ${transaction.category} | ${transaction.description} | ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(transaction.amount)}`;
+                if (y > 280) {
+                    doc.addPage();
+                    y = 12;
+                }
+                doc.text(line, 10, y);
+                y += 6;
+            });
+
+            doc.save(`finansas-historial-${new Date().toISOString().slice(0, 10)}.pdf`);
+            toast.success('PDF exportado correctamente');
+        } catch (error) {
+            toast.error('No pudimos exportar el PDF');
+        } finally {
+            setIsExportingPdf(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -39,6 +106,16 @@ export default function HistoryPage() {
                         <p className={`font-bold text-lg ${balance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                             {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(balance)}
                         </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={exportCsv} disabled={isExportingCsv || isLoading}>
+                            <FileDown className="h-4 w-4 mr-1" />
+                            CSV
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={exportPdf} disabled={isExportingPdf || isLoading}>
+                            <FileDown className="h-4 w-4 mr-1" />
+                            PDF
+                        </Button>
                     </div>
                 </div>
             </div>

@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,12 +20,37 @@ export default function AuthPage() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [loginMethod, setLoginMethod] = useState<'password' | 'magic-link'>('password');
+    const [nextPath, setNextPath] = useState('/dashboard');
 
     const router = useRouter();
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
+
+    const buildCallbackUrl = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+
+    useEffect(() => {
+        if (!supabase) return;
+
+        const checkExistingSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                router.replace('/dashboard');
+            }
+        };
+
+        checkExistingSession();
+    }, [router, supabase]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const requestedNext = params.get('next') || '/dashboard';
+        setNextPath(requestedNext.startsWith('/') ? requestedNext : '/dashboard');
+    }, []);
+
+    const normalizeEmail = () => email.trim().toLowerCase();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,12 +58,12 @@ export default function AuthPage() {
         setIsLoading(true);
 
         const { error } = await supabase.auth.signInWithPassword({
-            email,
+            email: normalizeEmail(),
             password,
         });
 
         if (error) {
-            setError('Email o contraseña incorrectos');
+            setError(error.message || 'Email o contraseña incorrectos');
         } else {
             toast.success('Sesión iniciada correctamente');
             router.push('/dashboard');
@@ -61,9 +86,9 @@ export default function AuthPage() {
         setIsLoading(true);
 
         const { error } = await supabase.auth.signInWithOtp({
-            email,
+            email: normalizeEmail(),
             options: {
-                emailRedirectTo: `${window.location.origin}/auth/callback`,
+                emailRedirectTo: buildCallbackUrl(),
             },
         });
 
@@ -95,10 +120,10 @@ export default function AuthPage() {
         setIsLoading(true);
 
         const { error } = await supabase.auth.signUp({
-            email,
+            email: normalizeEmail(),
             password,
             options: {
-                emailRedirectTo: `${window.location.origin}/auth/callback`,
+                emailRedirectTo: buildCallbackUrl(),
             },
         });
 
@@ -121,8 +146,8 @@ export default function AuthPage() {
         }
 
         setIsLoading(true);
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth/callback`,
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(), {
+            redirectTo: buildCallbackUrl(),
         });
 
         if (error) {
@@ -133,19 +158,35 @@ export default function AuthPage() {
         setIsLoading(false);
     };
 
+    if (!supabase) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+                <Card className="w-full max-w-md">
+                    <CardHeader>
+                        <CardTitle>Error de configuración</CardTitle>
+                        <CardDescription>
+                            Falta la configuración de Supabase. Revisa variables de entorno.
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+            </div>
+        );
+    }
+
     const handleGoogleLogin = async () => {
-        setIsLoading(true);
+        setError('');
+        setIsGoogleLoading(true);
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: buildCallbackUrl(),
             },
         });
 
         if (error) {
             setError(error.message);
-            setIsLoading(false);
         }
+        setIsGoogleLoading(false);
     };
 
     return (
@@ -191,10 +232,14 @@ export default function AuthPage() {
                                 type="button"
                                 className="w-full flex items-center gap-2"
                                 onClick={handleGoogleLogin}
-                                disabled={isLoading}
+                                disabled={isLoading || isGoogleLoading}
                             >
-                                <Chrome className="h-4 w-4" />
-                                Continuar con Google
+                                {isGoogleLoading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Chrome className="h-4 w-4" />
+                                )}
+                                {activeTab === 'register' ? 'Crear cuenta con Google' : 'Continuar con Google'}
                             </Button>
                             <div className="relative my-4">
                                 <div className="absolute inset-0 flex items-center">

@@ -10,7 +10,6 @@ import { SetupCheck } from '@/components/copilot/setup-check';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase-browser';
 
 type CopilotStep = 'upload' | 'verify' | 'success';
 
@@ -27,27 +26,26 @@ export default function CopilotPage() {
 
     const handleVerificationConfirm = async (formData: any) => {
         setIsSaving(true);
-        const supabase = createClient();
 
         try {
-            // 1. Get current user
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Usuario no autenticado');
-
-            // 2. Save to obligations table
-            const { error } = await supabase
-                .from('obligations')
-                .insert({
-                    user_id: user.id,
+            const response = await fetch('/api/obligations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
                     title: formData.title,
                     amount: formData.amount,
                     due_date: formData.due_date,
                     status: 'pending',
                     category: formData.category || 'Varios',
-                    minimum_payment: formData.minimum_payment || null
-                });
+                    minimum_payment: formData.minimum_payment || null,
+                }),
+            });
 
-            if (error) throw error;
+            const body = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(body?.error || 'No se pudo guardar la obligación');
+            }
 
             toast.success('¡Obligación guardada correctamente!');
             setStep('success');

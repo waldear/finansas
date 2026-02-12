@@ -11,9 +11,9 @@ import { useFinance } from '@/hooks/use-finance';
 import { Loader2 } from 'lucide-react';
 
 export function DebtForm() {
-    const { addDebt } = useFinance();
+    const { addDebt, isAddingDebt } = useFinance();
 
-    const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Debt>({
+    const { register, handleSubmit, reset, formState: { errors } } = useForm<Debt>({
         resolver: zodResolver(DebtSchema),
         defaultValues: {
             remaining_installments: 0,
@@ -23,8 +23,16 @@ export function DebtForm() {
     });
 
     const onSubmit = async (data: Debt) => {
-        await addDebt(data);
-        reset();
+        try {
+            await addDebt(data);
+            reset({
+                remaining_installments: 0,
+                total_installments: 1,
+                next_payment_date: new Date().toISOString().split('T')[0],
+            });
+        } catch {
+            // Error feedback is already handled by the mutation hook.
+        }
     };
 
     return (
@@ -79,8 +87,8 @@ export function DebtForm() {
                         {errors.next_payment_date && <p className="text-xs text-destructive">{errors.next_payment_date.message}</p>}
                     </div>
 
-                    <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    <Button type="submit" className="w-full" disabled={isAddingDebt}>
+                        {isAddingDebt ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                         Registrar Deuda
                     </Button>
                 </form>

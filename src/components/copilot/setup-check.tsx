@@ -14,6 +14,7 @@ interface SystemHealth {
     db: {
         obligations_table: boolean;
         documents_table: boolean;
+        document_jobs_table?: boolean;
         storage_bucket: boolean;
     };
 }
@@ -29,8 +30,8 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
             const data = await res.json();
             setHealth(data);
 
-            // Auto-proceed if everything is green
-            if (data.env.GEMINI_API_KEY && data.db.obligations_table && data.db.documents_table) {
+            const coreReady = data.env.GEMINI_API_KEY && data.db.obligations_table;
+            if (coreReady) {
                 onReady();
             }
         } catch (error) {
@@ -111,14 +112,14 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
                     {/* Step 2: Database Schema */}
                     <div className="space-y-3">
                         <h3 className="font-medium flex items-center gap-2">
-                            2. Tablas de Base de Datos (Supabase)
-                            {health.db.obligations_table ? (
+                            2. Tablas y Storage de Supabase
+                            {health.db.obligations_table && health.db.documents_table && health.db.document_jobs_table !== false && health.db.storage_bucket ? (
                                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                             ) : (
                                 <XCircle className="h-5 w-5 text-red-500" />
                             )}
                         </h3>
-                        {!health.db.obligations_table && (
+                        {(!health.db.obligations_table || !health.db.documents_table || health.db.document_jobs_table === false || !health.db.storage_bucket) && (
                             <Alert className="bg-blue-50 border-blue-200 text-blue-800">
                                 <Database className="h-4 w-4" />
                                 <AlertTitle>Tablas Faltantes o Error de Conexión</AlertTitle>
@@ -136,6 +137,12 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
                                     <div className="bg-slate-950 text-slate-50 p-3 rounded-md text-xs font-mono overflow-x-auto">
                                         No te preocupes, el archivo <code>supabase-copilot.sql</code> ya está en tu proyecto. Copia su contenido y pégalo en el SQL Editor de Supabase.
                                     </div>
+                                    {!health.db.storage_bucket && (
+                                        <p className="mt-2 text-xs font-semibold">También falta el bucket de Storage `documents` o su policy de upload/lectura.</p>
+                                    )}
+                                    {health.db.document_jobs_table === false && (
+                                        <p className="mt-2 text-xs font-semibold">Falta la tabla `document_jobs` (cola asíncrona).</p>
+                                    )}
                                 </AlertDescription>
                             </Alert>
                         )}

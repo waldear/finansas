@@ -2,8 +2,9 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useDashboard } from '@/hooks/use-dashboard';
+import { usePlanning } from '@/hooks/use-planning';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -16,7 +17,8 @@ import {
     MoreHorizontal,
     ArrowDownLeft,
     PieChart,
-    Activity
+    Activity,
+    AlertTriangle
 } from 'lucide-react';
 import { DashboardSkeleton } from '@/components/layout/dashboard-skeleton';
 import { cn } from '@/lib/utils';
@@ -24,6 +26,8 @@ import Link from 'next/link';
 
 export default function DashboardPage() {
     const { debts, savingsGoals, transactions, isLoading } = useDashboard();
+    const { budgets, recurringTransactions, runRecurring } = usePlanning();
+    const recurringRanRef = useRef(false);
 
     // Memoize expensive calculations
     const financialStats = useMemo(() => {
@@ -41,6 +45,75 @@ export default function DashboardPage() {
         return { totalIncome, totalExpenses, totalDebt, balance };
     }, [transactions, debts]);
 
+    const weeklyInsights = useMemo(() => {
+        const now = new Date();
+        const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+        const startCurrent = new Date(today);
+        startCurrent.setUTCDate(today.getUTCDate() - 6);
+        const startPrevious = new Date(startCurrent);
+        startPrevious.setUTCDate(startCurrent.getUTCDate() - 7);
+        const endPrevious = new Date(startCurrent);
+        endPrevious.setUTCDate(startCurrent.getUTCDate() - 1);
+
+        const toDate = (value: string) => new Date(`${value}T00:00:00.000Z`);
+        const inRange = (value: string, start: Date, end: Date) => {
+            const date = toDate(value);
+            return date >= start && date <= end;
+        };
+
+        const currentWeekIncome = transactions
+            .filter((t: any) => t.type === 'income' && inRange(t.date, startCurrent, today))
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
+        const currentWeekExpense = transactions
+            .filter((t: any) => t.type === 'expense' && inRange(t.date, startCurrent, today))
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
+
+        const previousWeekIncome = transactions
+            .filter((t: any) => t.type === 'income' && inRange(t.date, startPrevious, endPrevious))
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
+        const previousWeekExpense = transactions
+            .filter((t: any) => t.type === 'expense' && inRange(t.date, startPrevious, endPrevious))
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
+
+        const currentNet = currentWeekIncome - currentWeekExpense;
+        const previousNet = previousWeekIncome - previousWeekExpense;
+        const netDelta = currentNet - previousNet;
+        const trend = previousNet === 0 ? 100 : (netDelta / Math.abs(previousNet)) * 100;
+
+        const budgetAlerts = budgets
+            .filter((budget: any) => budget.isAlert)
+            .slice(0, 2)
+            .map((budget: any) => `Tu presupuesto de ${budget.category} está en ${Math.round(budget.usage)}%.`);
+
+        const recurringAlerts = recurringTransactions
+            .filter((rule: any) => rule.is_active)
+            .slice(0, 2)
+            .map((rule: any) => `Próxima recurrencia: ${rule.description} (${rule.next_run}).`);
+
+        const recommendations = [
+            ...budgetAlerts,
+            ...recurringAlerts,
+        ];
+
+        if (recommendations.length === 0) {
+            recommendations.push('Todo está en rango: no hay alertas críticas esta semana.');
+        }
+
+        return {
+            currentWeekIncome,
+            currentWeekExpense,
+            currentNet,
+            trend,
+            recommendations,
+        };
+    }, [transactions, budgets, recurringTransactions]);
+
+    useEffect(() => {
+        if (recurringRanRef.current) return;
+        recurringRanRef.current = true;
+        runRecurring().catch(() => {});
+    }, [runRecurring]);
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
             style: 'currency',
@@ -53,7 +126,7 @@ export default function DashboardPage() {
         { label: 'Ingresar', icon: Plus, color: 'bg-emerald-500', href: '/dashboard/transactions' },
         { label: 'Gastar', icon: ArrowUpRight, color: 'bg-red-500', href: '/dashboard/transactions' },
         { label: 'Copiloto', icon: Activity, color: 'bg-blue-500', href: '/dashboard/copilot' },
-        { label: 'Más', icon: MoreHorizontal, color: 'bg-zinc-700', href: '#' },
+        { label: 'Auditoría', icon: MoreHorizontal, color: 'bg-zinc-700', href: '/dashboard/audit' },
     ];
 
     if (isLoading) {
@@ -138,6 +211,48 @@ export default function DashboardPage() {
                             className="h-2 [&>div]:neon-glow"
                         />
                     </div>
+                </Card>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+                <Card className="glass-card rounded-[2rem] border-0 p-6">
+                    <CardHeader className="p-0 pb-4">
+                        <CardTitle>KPIs Semanales</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0 space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                            Ingresos: <span className="font-bold text-emerald-500">{formatCurrency(weeklyInsights.currentWeekIncome)}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            Gastos: <span className="font-bold text-red-500">{formatCurrency(weeklyInsights.currentWeekExpense)}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            Neto semanal: <span className={cn('font-bold', weeklyInsights.currentNet >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                                {formatCurrency(weeklyInsights.currentNet)}
+                            </span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            Tendencia vs semana anterior: <span className={cn('font-bold', weeklyInsights.trend >= 0 ? 'text-emerald-500' : 'text-red-500')}>
+                                {weeklyInsights.trend.toFixed(1)}%
+                            </span>
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card className="glass-card rounded-[2rem] border-0 p-6">
+                    <CardHeader className="p-0 pb-4">
+                        <CardTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            Recomendaciones Automáticas
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0 space-y-2">
+                        {weeklyInsights.recommendations.map((recommendation, index) => (
+                            <p key={index} className="text-sm text-muted-foreground">
+                                • {recommendation}
+                            </p>
+                        ))}
+                    </CardContent>
                 </Card>
             </div>
 

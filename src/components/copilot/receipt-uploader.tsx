@@ -33,6 +33,22 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
         },
         maxFiles: 1,
         maxSize: 5 * 1024 * 1024, // 5MB
+        onDropRejected: (rejections) => {
+            const firstError = rejections[0]?.errors[0];
+            if (!firstError) return;
+
+            if (firstError.code === 'file-too-large') {
+                toast.error('El archivo supera 5MB. Comprime el PDF o sube una imagen.');
+                return;
+            }
+
+            if (firstError.code === 'file-invalid-type') {
+                toast.error('Formato no soportado. Usa JPG, PNG, WEBP o PDF.');
+                return;
+            }
+
+            toast.error('No pudimos cargar el archivo seleccionado.');
+        },
     });
 
     const removeFile = (e: React.MouseEvent) => {
@@ -44,12 +60,7 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
         if (!file) return;
 
         setIsUploading(true);
-        setUploadProgress(10); // Start progress
-
-        // Simulate progress for better UX
-        const progressInterval = setInterval(() => {
-            setUploadProgress(prev => Math.min(prev + 10, 90));
-        }, 500);
+        setUploadProgress(10);
 
         try {
             const formData = new FormData();
@@ -57,6 +68,7 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
 
             const response = await fetch('/api/documents/process', {
                 method: 'POST',
+                credentials: 'include',
                 body: formData,
             });
 
@@ -66,11 +78,55 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
             }
 
             const result = await response.json();
+            setUploadProgress(25);
 
-            clearInterval(progressInterval);
+            if (result.jobId) {
+                await fetch(`/api/documents/jobs/${result.jobId}/run`, {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+
+                for (let attempt = 0; attempt < 45; attempt++) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                    const statusResponse = await fetch(`/api/documents/jobs/${result.jobId}`, {
+                        credentials: 'include',
+                    });
+
+                    const statusBody = await statusResponse.json().catch(() => null);
+                    if (!statusResponse.ok) {
+                        throw new Error(statusBody?.error || 'No se pudo consultar el estado del análisis');
+                    }
+
+                    if (statusBody.status === 'completed') {
+                        setUploadProgress(100);
+                        toast.success('Documento procesado con éxito');
+
+                        if (statusBody.warning) {
+                            toast.warning(statusBody.warning);
+                        }
+
+                        setTimeout(() => {
+                            onUploadComplete(statusBody.data);
+                        }, 500);
+                        return;
+                    }
+
+                    if (statusBody.status === 'failed') {
+                        throw new Error(statusBody.error || 'El análisis del documento falló.');
+                    }
+
+                    setUploadProgress(Math.min(95, 30 + (attempt * 2)));
+                }
+
+                throw new Error('El análisis tardó demasiado. Inténtalo nuevamente.');
+            }
+
             setUploadProgress(100);
 
             toast.success('Documento procesado con éxito');
+            if (result.warning) {
+                toast.warning(result.warning);
+            }
 
             // Short delay to show 100% completion
             setTimeout(() => {
@@ -78,7 +134,6 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
             }, 500);
 
         } catch (error: any) {
-            clearInterval(progressInterval);
             console.error(error);
             toast.error(error.message || 'Error al subir el archivo');
             setIsUploading(false);

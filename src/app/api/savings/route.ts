@@ -1,29 +1,86 @@
 import { createClient } from '@/lib/supabase-server';
 import { SavingsGoalSchema } from '@/lib/schemas';
 import { NextResponse } from 'next/server';
+import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { recordAuditEvent } from '@/lib/audit';
 
 export async function GET() {
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = createRequestContext('/api/savings', 'GET');
+    const startedAt = Date.now();
+    try {
+        const supabase = await createClient();
+        if (!supabase) return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
 
-    const { data, error } = await supabase.from('savings_goals').select('*').order('created_at', { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { data, error } = await supabase
+            .from('savings_goals')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .order('created_at', { ascending: false });
+
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+        logInfo('savings_loaded', {
+            ...context,
+            userId: session.user.id,
+            count: data?.length || 0,
+            durationMs: Date.now() - startedAt,
+        });
+
+        return NextResponse.json(data);
+    } catch (error) {
+        logError('savings_get_exception', error, {
+            ...context,
+            durationMs: Date.now() - startedAt,
+        });
+        return NextResponse.json({ error: 'Error al cargar metas' }, { status: 500 });
+    }
 }
 
 export async function POST(req: Request) {
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const context = createRequestContext('/api/savings', 'POST');
+    const startedAt = Date.now();
 
     try {
+        const supabase = await createClient();
+        if (!supabase) return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
         const body = await req.json();
         const validatedData = SavingsGoalSchema.parse(body);
-        const { data, error } = await supabase.from('savings_goals').insert([{ ...validatedData, user_id: session.user.id }]).select().single();
+        const { data, error } = await supabase
+            .from('savings_goals')
+            .insert([{ ...validatedData, user_id: session.user.id }])
+            .select()
+            .single();
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+        await recordAuditEvent({
+            supabase,
+            userId: session.user.id,
+            entityType: 'savings_goal',
+            entityId: data.id,
+            action: 'create',
+            afterData: data,
+        });
+
+        logInfo('savings_goal_created', {
+            ...context,
+            userId: session.user.id,
+            goalId: data.id,
+            durationMs: Date.now() - startedAt,
+        });
+
         return NextResponse.json(data);
     } catch (err: any) {
+        logError('savings_goal_create_exception', err, {
+            ...context,
+            durationMs: Date.now() - startedAt,
+        });
         return NextResponse.json({ error: err.errors || err.message }, { status: 400 });
     }
 }

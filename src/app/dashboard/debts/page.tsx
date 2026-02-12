@@ -7,7 +7,7 @@ import { DebtForm } from '@/components/finance/debt-form';
 import { Loader2, CreditCard, Calendar, ArrowRight } from 'lucide-react';
 
 export default function DebtsPage() {
-    const { debts, isLoadingDebts } = useFinance();
+    const { debts, isLoadingDebts, debtsError } = useFinance();
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -74,6 +74,7 @@ export default function DebtsPage() {
                     </CardContent>
                 </Card>
             </div>
+            {debtsError && <p className="text-sm text-destructive">Error de deudas: {debtsError}</p>}
         </div>
     );
 }
