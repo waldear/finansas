@@ -35,10 +35,10 @@ const navItems = [
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const supabase = createClient();
     const [user, setUser] = useState<any>(null);
 
     useEffect(() => {
+        const supabase = createClient();
         const getUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             setUser(user);
@@ -47,6 +47,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     }, []);
 
     const handleSignOut = async () => {
+        const supabase = createClient();
         await supabase.auth.signOut();
         window.location.href = '/auth';
     };
@@ -74,7 +75,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <NotificationCenter />
+                        {/* <NotificationCenter /> - Temporarily disabled for debugging */}
                     </div>
                 </div>
             </header>
