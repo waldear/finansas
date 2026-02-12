@@ -63,7 +63,8 @@ export async function POST(req: Request) {
 
 
         // 3. Process with Gemini
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY;
+        const genAI = new GoogleGenerativeAI(apiKey!);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const arrayBuffer = await file.arrayBuffer();

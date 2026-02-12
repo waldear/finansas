@@ -6,7 +6,7 @@ export async function GET() {
     const supabase = await createClient();
 
     // Check key
-    const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+    const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
 
     // Check tables
     const { error: obligationsError } = await supabase.from('obligations').select('count', { count: 'exact', head: true });
