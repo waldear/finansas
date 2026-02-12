@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -8,44 +8,43 @@ import {
     PlusCircle,
     List,
     CreditCard,
-    Lightbulb,
-    Wallet,
-    TrendingUp,
-    TrendingDown,
-    Menu,
     Bot,
     BarChart3,
-    Download,
     LogOut,
     User,
-    Tag,
-    PiggyBank,
-    RefreshCw,
     Settings,
-    X,
-    Sparkles
+    Bell,
+    Home,
+    Search,
+    QrCode,
+    Sparkles,
+    PiggyBank
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase-browser';
-import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { NotificationCenter } from '@/components/layout/notification-center';
+import { cn } from '@/lib/utils';
 
-const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    { id: 'copilot', label: 'Copiloto AI', icon: Sparkles, href: '/dashboard/copilot' },
-    { id: 'transactions', label: 'Transacciones', icon: PlusCircle, href: '/dashboard/transactions' },
-    { id: 'history', label: 'Historial', icon: List, href: '/dashboard/history' },
-    { id: 'charts', label: 'Gráficos', icon: BarChart3, href: '/dashboard/charts' },
-    { id: 'debts', label: 'Deudas', icon: CreditCard, href: '/dashboard/debts' },
-    { id: 'savings', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
-    { id: 'assistant', label: 'Chat Asistente', icon: Bot, href: '/dashboard/assistant' },
+const navItems = [
+    { id: 'dashboard', label: 'Home', icon: Home, href: '/dashboard' },
+    { id: 'charts', label: 'Stats', icon: BarChart3, href: '/dashboard/charts' },
+    { id: 'action', label: 'Pay', icon: QrCode, href: '/dashboard/copilot', isAction: true },
+    { id: 'debts', label: 'Cards', icon: CreditCard, href: '/dashboard/debts' },
+    { id: 'profile', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const pathname = usePathname();
     const supabase = createClient();
+    const [user, setUser] = useState<any>(null);
+
+    useEffect(() => {
+        const getUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            setUser(user);
+        };
+        getUser();
+    }, []);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -53,94 +52,91 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     };
 
     return (
-        <div className="min-h-screen bg-background">
+        <div className="min-h-screen bg-background text-foreground pb-24 md:pb-0 md:pl-20">
             {/* Header */}
-            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="container flex h-16 items-center justify-between px-4">
+            <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-xl">
+                <div className="container flex h-20 items-center justify-between px-6">
                     <div className="flex items-center gap-4">
-                        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-                            <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon" className="md:hidden">
-                                    <Menu className="h-6 w-6" />
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent side="left" className="w-64 p-0">
-                                <div className="flex flex-col h-full">
-                                    <div className="p-6 border-b">
-                                        <h2 className="text-lg font-bold flex items-center gap-2">
-                                            <FinFlowLogo className="h-8 w-8" />
-                                            FinFlow
-                                        </h2>
-                                    </div>
-                                    <nav className="flex-1 p-4 space-y-1">
-                                        {menuItems.map((item) => (
-                                            <Link
-                                                key={item.id}
-                                                href={item.href}
-                                                onClick={() => setIsMobileMenuOpen(false)}
-                                            >
-                                                <Button
-                                                    variant={pathname === item.href ? 'secondary' : 'ghost'}
-                                                    className="w-full justify-start gap-3 h-11"
-                                                >
-                                                    <item.icon className="h-4 w-4" />
-                                                    {item.label}
-                                                </Button>
-                                            </Link>
-                                        ))}
-                                    </nav>
-                                    <div className="p-4 border-t">
-                                        <Button variant="ghost" className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleSignOut}>
-                                            <LogOut className="h-4 w-4" />
-                                            Cerrar Sesión
-                                        </Button>
-                                    </div>
-                                </div>
-                            </SheetContent>
-                        </Sheet>
-                        <h1 className="text-xl font-bold flex items-center gap-2">
-                            <FinFlowLogo className="h-10 w-10" />
-                            <span className="bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent hidden sm:inline">FinFlow</span>
-                        </h1>
+                        <div className="relative h-12 w-12 rounded-full border-2 border-primary/20 p-0.5">
+                            <img
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'default'}`}
+                                alt="Avatar"
+                                className="h-full w-full rounded-full bg-muted"
+                            />
+                            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background bg-green-500" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-muted-foreground font-medium">Hola de nuevo,</p>
+                            <h2 className="text-lg font-bold tracking-tight">
+                                {user?.user_metadata?.full_name?.split(' ')[0] || 'Usuario'}
+                            </h2>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2 md:gap-4">
+                    <div className="flex items-center gap-2">
                         <NotificationCenter />
-                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
-                            <User className="h-5 w-5" />
-                        </Button>
                     </div>
                 </div>
             </header>
 
-            <div className="container flex-1 items-start md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10 p-4 md:p-6">
-                {/* Sidebar */}
-                <aside className="fixed top-20 z-30 -ml-2 hidden h-[calc(100vh-5rem)] w-full shrink-0 overflow-y-auto border-r md:sticky md:block">
-                    <nav className="space-y-1 pr-4">
-                        {menuItems.map((item) => (
-                            <Link key={item.id} href={item.href}>
-                                <Button
-                                    variant={pathname === item.href ? 'secondary' : 'ghost'}
-                                    className="w-full justify-start gap-3 h-11 mb-1"
-                                >
-                                    <item.icon className="h-4 w-4" />
-                                    {item.label}
-                                </Button>
-                            </Link>
-                        ))}
-                    </nav>
-                    <div className="mt-8 pt-8 border-t pr-4">
-                        <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive transition-colors" onClick={handleSignOut}>
-                            <LogOut className="h-4 w-4" />
-                            Salir
-                        </Button>
-                    </div>
-                </aside>
+            {/* Desktop Sidebar (Optional, but improved for desktop) */}
+            <aside className="fixed left-0 top-0 bottom-0 z-50 hidden w-20 flex-col items-center py-8 border-r bg-card md:flex">
+                <div className="mb-10 text-primary">
+                    <Sparkles className="h-8 w-8" />
+                </div>
+                <nav className="flex flex-1 flex-col gap-6">
+                    {navItems.map((item) => (
+                        <Link key={item.id} href={item.href} title={item.label}>
+                            <div className={cn(
+                                "p-3 rounded-2xl transition-all duration-300",
+                                pathname === item.href
+                                    ? "bg-primary text-white neon-glow scale-110"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}>
+                                <item.icon className="h-6 w-6" />
+                            </div>
+                        </Link>
+                    ))}
+                </nav>
+                <Button variant="ghost" size="icon" onClick={handleSignOut} className="text-muted-foreground hover:text-destructive">
+                    <LogOut className="h-6 w-6" />
+                </Button>
+            </aside>
 
-                {/* Dashboard Content */}
-                <main className="flex w-full flex-col overflow-hidden">
-                    {children}
-                </main>
+            {/* Main Content */}
+            <main className="container max-w-7xl mx-auto px-4 py-6 md:px-8">
+                {children}
+            </main>
+
+            {/* Mobile Bottom Navigation */}
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md md:hidden">
+                <nav className="glass border border-white/10 rounded-[2.5rem] flex items-center justify-between px-4 py-3 shadow-2xl">
+                    {navItems.map((item) => {
+                        const isActive = pathname === item.href;
+
+                        if (item.id === 'action') {
+                            return (
+                                <Link key={item.id} href={item.href}>
+                                    <div className="relative -top-8 h-16 w-16 rounded-full bg-primary flex items-center justify-center text-white neon-glow border-4 border-background transition-transform active:scale-90">
+                                        <item.icon className="h-8 w-8" />
+                                    </div>
+                                </Link>
+                            );
+                        }
+
+                        return (
+                            <Link key={item.id} href={item.href}>
+                                <div className={cn(
+                                    "flex flex-col items-center gap-1 p-2 transition-colors",
+                                    isActive ? "text-primary" : "text-muted-foreground"
+                                )}>
+                                    <item.icon className="h-6 w-6" />
+                                    {isActive && <div className="h-1 w-1 rounded-full bg-primary" />}
+                                </div>
+                            </Link>
+                        );
+                    })}
+                </nav>
             </div>
         </div>
     );
