@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
 
 function advanceDate(dateValue: string, frequency: 'weekly' | 'biweekly' | 'monthly') {
@@ -9,6 +9,12 @@ function advanceDate(dateValue: string, frequency: 'weekly' | 'biweekly' | 'mont
     if (frequency === 'biweekly') date.setUTCDate(date.getUTCDate() + 14);
     if (frequency === 'monthly') date.setUTCMonth(date.getUTCMonth() + 1);
     return date.toISOString().slice(0, 10);
+}
+
+function isMissingRecurringTableError(message?: string | null) {
+    if (!message) return false;
+    const value = message.toLowerCase();
+    return value.includes('recurring_transactions') && value.includes('schema cache');
 }
 
 export async function POST() {
@@ -30,7 +36,21 @@ export async function POST() {
             .eq('is_active', true)
             .lte('next_run', today);
 
-        if (dueError) return NextResponse.json({ error: dueError.message }, { status: 500 });
+        if (dueError) {
+            if (isMissingRecurringTableError(dueError.message)) {
+                logWarn('recurring_runner_table_missing_noop', {
+                    ...context,
+                    userId: session.user.id,
+                    reason: dueError.message,
+                });
+                return NextResponse.json({
+                    generated: 0,
+                    updatedRules: 0,
+                    warning: 'Falta tabla recurring_transactions',
+                });
+            }
+            return NextResponse.json({ error: dueError.message }, { status: 500 });
+        }
         if (!dueRules || dueRules.length === 0) {
             return NextResponse.json({ generated: 0, updatedRules: 0 });
         }

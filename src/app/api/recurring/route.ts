@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { RecurringTransactionSchema } from '@/lib/schemas';
-import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+
+function isMissingRecurringTableError(message?: string | null) {
+    if (!message) return false;
+    const value = message.toLowerCase();
+    return value.includes('recurring_transactions') && value.includes('schema cache');
+}
 
 export async function GET() {
     const context = createRequestContext('/api/recurring', 'GET');
@@ -21,7 +27,17 @@ export async function GET() {
             .eq('user_id', session.user.id)
             .order('next_run', { ascending: true });
 
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) {
+            if (isMissingRecurringTableError(error.message)) {
+                logWarn('recurring_table_missing_returning_empty', {
+                    ...context,
+                    userId: session.user.id,
+                    reason: error.message,
+                });
+                return NextResponse.json([]);
+            }
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
 
         logInfo('recurring_loaded', {
             ...context,
@@ -64,7 +80,15 @@ export async function POST(req: Request) {
             .select()
             .single();
 
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) {
+            if (isMissingRecurringTableError(error.message)) {
+                return NextResponse.json({
+                    error: 'El módulo de recurrencias no está inicializado en la base.',
+                    hint: 'Ejecuta supabase-advanced.sql en Supabase SQL Editor.',
+                }, { status: 503 });
+            }
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
 
         await recordAuditEvent({
             supabase,

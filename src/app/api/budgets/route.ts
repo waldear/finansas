@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { BudgetSchema } from '@/lib/schemas';
-import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
 
 function getMonthRange(month: string) {
@@ -17,6 +17,12 @@ function getMonthRange(month: string) {
 function currentMonth() {
     const date = new Date();
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function isMissingBudgetsTableError(message?: string | null) {
+    if (!message) return false;
+    const value = message.toLowerCase();
+    return value.includes('budgets') && value.includes('schema cache');
 }
 
 export async function GET(req: Request) {
@@ -40,7 +46,17 @@ export async function GET(req: Request) {
             .eq('month', month)
             .order('category', { ascending: true });
 
-        if (budgetsError) return NextResponse.json({ error: budgetsError.message }, { status: 500 });
+        if (budgetsError) {
+            if (isMissingBudgetsTableError(budgetsError.message)) {
+                logWarn('budgets_table_missing_returning_empty', {
+                    ...context,
+                    userId: session.user.id,
+                    reason: budgetsError.message,
+                });
+                return NextResponse.json([]);
+            }
+            return NextResponse.json({ error: budgetsError.message }, { status: 500 });
+        }
 
         const { data: transactions, error: txError } = await supabase
             .from('transactions')
@@ -113,7 +129,15 @@ export async function POST(req: Request) {
             .select()
             .single();
 
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        if (error) {
+            if (isMissingBudgetsTableError(error.message)) {
+                return NextResponse.json({
+                    error: 'El módulo de presupuestos no está inicializado en la base.',
+                    hint: 'Ejecuta supabase-advanced.sql en Supabase SQL Editor.',
+                }, { status: 503 });
+            }
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
 
         await recordAuditEvent({
             supabase,
