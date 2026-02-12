@@ -2,7 +2,8 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useFinance } from '@/hooks/use-finance';
+import { useMemo } from 'react';
+import { useDashboard } from '@/hooks/use-dashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -17,29 +18,28 @@ import {
     PieChart,
     Activity
 } from 'lucide-react';
-import { useTransactions } from '@/hooks/use-transactions';
 import { DashboardSkeleton } from '@/components/layout/dashboard-skeleton';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-    const { debts, savingsGoals, isLoadingDebts, isLoadingGoals } = useFinance();
-    const { transactions, isLoading: isLoadingTransactions } = useTransactions();
+    const { debts, savingsGoals, transactions, isLoading } = useDashboard();
 
-    if (isLoadingTransactions || isLoadingDebts || isLoadingGoals) {
-        return <DashboardSkeleton />;
-    }
+    // Memoize expensive calculations
+    const financialStats = useMemo(() => {
+        const totalIncome = transactions
+            .filter((t: any) => t.type === 'income')
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
 
-    const totalIncome = transactions
-        .filter(t => t.type === 'income')
-        .reduce((acc, t) => acc + t.amount, 0);
+        const totalExpenses = transactions
+            .filter((t: any) => t.type === 'expense')
+            .reduce((acc: number, t: any) => acc + t.amount, 0);
 
-    const totalExpenses = transactions
-        .filter(t => t.type === 'expense')
-        .reduce((acc, t) => acc + t.amount, 0);
+        const totalDebt = debts.reduce((acc: number, d: any) => acc + d.total_amount, 0);
+        const balance = totalIncome - totalExpenses;
 
-    const totalDebt = debts.reduce((acc, d) => acc + d.total_amount, 0);
-    const balance = totalIncome - totalExpenses;
+        return { totalIncome, totalExpenses, totalDebt, balance };
+    }, [transactions, debts]);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -55,6 +55,12 @@ export default function DashboardPage() {
         { label: 'Copiloto', icon: Activity, color: 'bg-blue-500', href: '/dashboard/copilot' },
         { label: 'Más', icon: MoreHorizontal, color: 'bg-zinc-700', href: '#' },
     ];
+
+    if (isLoading) {
+        return <DashboardSkeleton />;
+    }
+
+    const { totalIncome, totalExpenses, totalDebt, balance } = financialStats;
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -145,7 +151,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-3">
-                    {transactions.slice(0, 4).map((t) => (
+                    {transactions.slice(0, 4).map((t: any) => (
                         <Card key={t.id} className="glass-card rounded-3xl p-4 border-0 flex items-center gap-4 hover:bg-white/[0.05] transition-colors group">
                             <div className={cn(
                                 "h-12 w-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform",

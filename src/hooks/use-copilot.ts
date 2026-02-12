@@ -34,13 +34,13 @@ interface Obligation {
 }
 
 export function useCopilot() {
-    const supabase = createClient();
     const { debts, savingsGoals, isLoadingGoals } = useFinance();
     const { transactions, isLoading: isLoadingTransactions } = useTransactions();
 
     const { data: obligations, isLoading: isLoadingObligations } = useQuery<Obligation[]>({
         queryKey: ['obligations'],
         queryFn: async () => {
+            const supabase = createClient(); // Move inside queryFn
             try {
                 const { data, error } = await supabase
                     .from('obligations')
@@ -60,6 +60,7 @@ export function useCopilot() {
                 return [];
             }
         },
+        staleTime: 5 * 60 * 1000, // 5 minutes cache
     });
 
     const calculateFinancialProfile = (): CopilotInsight => {
