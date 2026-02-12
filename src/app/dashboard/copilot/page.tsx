@@ -6,14 +6,16 @@ import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { ReceiptUploader } from '@/components/copilot/receipt-uploader';
 import { ExtractionVerifier } from '@/components/copilot/extraction-verifier';
 import { WeeklyPlan } from '@/components/copilot/weekly-plan';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { SetupCheck } from '@/components/copilot/setup-check';
+import { Card, CardContent } from '@/components/ui/card';
+import { ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase-browser';
 
 type CopilotStep = 'upload' | 'verify' | 'success';
 
 export default function CopilotPage() {
+    const [isReady, setIsReady] = useState(false);
     const [step, setStep] = useState<CopilotStep>('upload');
     const [extractedData, setExtractedData] = useState<any>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -43,7 +45,6 @@ export default function CopilotPage() {
                     status: 'pending',
                     category: formData.category || 'Varios',
                     minimum_payment: formData.minimum_payment || null
-                    // extraction_id could be linked here if we passed it from the upload step
                 });
 
             if (error) throw error;
@@ -63,6 +64,18 @@ export default function CopilotPage() {
         setStep('upload');
         setExtractedData(null);
     };
+
+    if (!isReady) {
+        return (
+            <div className="container max-w-4xl py-6 space-y-8">
+                <div className="flex flex-col items-center text-center space-y-4">
+                    <FinFlowLogo className="w-16 h-16" />
+                    <h1 className="text-3xl font-bold tracking-tight">Tu Copiloto Financiero</h1>
+                </div>
+                <SetupCheck onReady={() => setIsReady(true)} />
+            </div>
+        );
+    }
 
     return (
         <div className="container max-w-4xl py-6 space-y-8">

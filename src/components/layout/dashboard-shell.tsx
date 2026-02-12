@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase-browser';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
+import { NotificationCenter } from '@/components/layout/notification-center';
 
 const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
@@ -104,6 +105,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     </div>
 
                     <div className="flex items-center gap-2 md:gap-4">
+                        <NotificationCenter />
                         <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
                             <User className="h-5 w-5" />
                         </Button>

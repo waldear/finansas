@@ -24,21 +24,41 @@ export interface CopilotInsight {
     monthlyOutlook: string; // "Surviving", "Building", "Thriving"
 }
 
+interface Obligation {
+    id: string;
+    title: string;
+    amount: number;
+    due_date: string;
+    status: string;
+    category: string;
+}
+
 export function useCopilot() {
     const supabase = createClient();
     const { debts, savingsGoals, isLoadingGoals } = useFinance();
     const { transactions, isLoading: isLoadingTransactions } = useTransactions();
 
-    const { data: obligations, isLoading: isLoadingObligations } = useQuery({
+    const { data: obligations, isLoading: isLoadingObligations } = useQuery<Obligation[]>({
         queryKey: ['obligations'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('obligations')
-                .select('*')
-                .eq('status', 'pending');
+            try {
+                const { data, error } = await supabase
+                    .from('obligations')
+                    .select('*')
+                    .eq('status', 'pending');
 
-            if (error) throw error;
-            return data;
+                if (error) {
+                    if (error.code === '42P01') {
+                        console.warn('Obligations table missing, returning empty array.');
+                        return [];
+                    }
+                    throw error;
+                }
+                return data as Obligation[] || [];
+            } catch (err) {
+                console.error('Error fetching obligations:', err);
+                return [];
+            }
         },
     });
 
@@ -55,7 +75,6 @@ export function useCopilot() {
 
         // 1. Calculate basic cashflow (Last 30 days)
         const now = new Date();
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
         let income = 0;
         let expenses = 0;
@@ -69,11 +88,6 @@ export function useCopilot() {
         const monthlyDebtPayments = debts.reduce((acc, curr) => acc + curr.monthly_payment, 0);
 
         // Simple "Capital Available" metric
-        // Income - (Expenses so far + Pending Obligations + Fixed Debt Payments)
-        // Note: Ideally we'd project future income, but for MVP we use total income received this month vs total expected outflow.
-        // If it's early in the month, income might be low. We should probably use average income or just current balance if we had it.
-        // For MVP: Let's assume 'income' is "what has come in this month".
-
         const capitalAvailable = income - (expenses + totalObligations + monthlyDebtPayments);
 
         // 2. Determine Profile
@@ -102,7 +116,7 @@ export function useCopilot() {
         const actions: WeeklyAction[] = [];
 
         // Urgent: Overdue or near-due obligations
-        (obligations || []).forEach(obs => {
+        (obligations || []).forEach((obs) => {
             const daysUntilDue = Math.ceil((new Date(obs.due_date).getTime() - now.getTime()) / (1000 * 3600 * 24));
 
             if (daysUntilDue <= 3) {
