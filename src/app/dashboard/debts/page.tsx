@@ -218,12 +218,12 @@ export default function DebtsPage() {
                                                 <p className={`text-xs ${dueBadge.className}`}>{dueBadge.label}</p>
                                             )}
 
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                                 <Button
                                                     type="button"
                                                     onClick={() => debt.id && handleConfirmPayment(debt.id)}
                                                     disabled={!debt.id || isProcessingPayment || isConfirmingDebtPayment || isSettled || isMutating}
-                                                    className="w-full"
+                                                    className="w-full sm:flex-1 sm:min-w-0"
                                                     variant={isSettled ? 'secondary' : 'default'}
                                                 >
                                                     {isProcessingPayment ? (
@@ -231,29 +231,37 @@ export default function DebtsPage() {
                                                     ) : (
                                                         <CheckCircle2 className="h-4 w-4 mr-2" />
                                                     )}
-                                                    {isSettled ? 'Deuda saldada' : 'Confirmar pago debitado'}
+                                                    {isSettled ? 'Deuda saldada' : (
+                                                        <>
+                                                            <span className="sm:hidden">Confirmar pago</span>
+                                                            <span className="hidden sm:inline">Confirmar pago debitado</span>
+                                                        </>
+                                                    )}
                                                 </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => startEditing(debt)}
-                                                    disabled={!debt.id || isMutating}
-                                                    title="Editar deuda"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-destructive hover:text-destructive"
-                                                    onClick={() => debt.id && handleDelete(debt.id)}
-                                                    disabled={!debt.id || isMutating}
-                                                    title="Eliminar deuda"
-                                                >
-                                                    {isMutating && isDeletingDebt ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                                </Button>
+
+                                                <div className="flex w-full justify-end gap-2 sm:w-auto">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => startEditing(debt)}
+                                                        disabled={!debt.id || isMutating}
+                                                        title="Editar deuda"
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() => debt.id && handleDelete(debt.id)}
+                                                        disabled={!debt.id || isMutating}
+                                                        title="Eliminar deuda"
+                                                    >
+                                                        {isMutating && isDeletingDebt ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                                    </Button>
+                                                </div>
                                             </div>
 
                                             {isEditing && (
