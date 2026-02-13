@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     BarChart3,
+    Brain,
     Bot,
     CreditCard,
-    DollarSign,
     Home,
     LogOut,
     Moon,
@@ -24,12 +24,13 @@ import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { applyTheme, AppTheme, getStoredTheme } from '@/lib/theme';
 
-function MoneyBotIcon({ className }: { className?: string }) {
+function AssistantBrainIcon({ className }: { className?: string }) {
     return (
         <span className={cn('relative inline-flex items-center justify-center', className)}>
             <Bot className="h-8 w-8" />
-            <DollarSign className="absolute left-1.5 top-2 h-3.5 w-3.5 text-emerald-300" strokeWidth={2.5} />
-            <DollarSign className="absolute right-1.5 top-2 h-3.5 w-3.5 text-emerald-300" strokeWidth={2.5} />
+            <span className="absolute left-[8px] top-[11px] h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+            <span className="absolute right-[8px] top-[11px] h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+            <Brain className="absolute -right-1 -top-1 h-3.5 w-3.5 text-cyan-300" strokeWidth={2.25} />
         </span>
     );
 }
@@ -37,7 +38,7 @@ function MoneyBotIcon({ className }: { className?: string }) {
 const navItems = [
     { id: 'dashboard', label: 'Home', icon: Home, href: '/dashboard' },
     { id: 'charts', label: 'Stats', icon: BarChart3, href: '/dashboard/charts' },
-    { id: 'action', label: 'Copilot', icon: MoneyBotIcon, href: '/dashboard/copilot', isAction: true },
+    { id: 'action', label: 'Asistente', icon: AssistantBrainIcon, href: '/dashboard/assistant', isAction: true },
     { id: 'debts', label: 'Cards', icon: CreditCard, href: '/dashboard/debts' },
     { id: 'profile', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
 ];

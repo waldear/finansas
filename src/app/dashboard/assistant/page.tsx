@@ -6,23 +6,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Bot, Send, User, Loader2 } from 'lucide-react';
-import { useFinance } from '@/hooks/use-finance';
-import { useTransactions } from '@/hooks/use-transactions';
+import { Brain, Send, Loader2 } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
+
+const quickPrompts = [
+    'Dame recordatorios de vencimientos de esta semana',
+    '¿Qué pagos debería priorizar hoy?',
+    'Analiza mis gastos y sugiere 3 ajustes',
+    '¿Cómo voy frente a mis presupuestos?',
+];
 
 export default function AssistantPage() {
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const { debts, savingsGoals } = useFinance();
-    const { transactions } = useTransactions();
+    const handleSend = async (forcedMessage?: string) => {
+        const userMessage = (forcedMessage ?? input).trim();
+        if (!userMessage) return;
 
-    const handleSend = async () => {
-        if (!input.trim()) return;
-
-        const userMessage = input;
         setInput('');
         setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
         setIsLoading(true);
@@ -34,19 +36,14 @@ export default function AssistantPage() {
                 credentials: 'include',
                 body: JSON.stringify({
                     message: userMessage,
-                    context: {
-                        debts,
-                        transactions,
-                        summary: {
-                            balance: transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0),
-                            totalIncome: transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
-                            totalExpenses: transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
-                        }
-                    }
                 }),
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(data?.error || 'No se pudo obtener respuesta del asistente.');
+            }
+
             setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu solicitud.' }]);
@@ -60,7 +57,7 @@ export default function AssistantPage() {
             <Card className="flex-1 flex flex-col min-h-0 border-none shadow-lg">
                 <CardHeader className="border-b bg-primary/5">
                     <CardTitle className="flex items-center gap-2">
-                        <Bot className="h-5 w-5 text-primary" />
+                        <Brain className="h-5 w-5 text-primary" />
                         Asistente Inteligente
                     </CardTitle>
                 </CardHeader>
@@ -71,11 +68,26 @@ export default function AssistantPage() {
                                 <div className="text-center py-10 space-y-4">
                                     <FinFlowLogo className="h-20 w-20 mx-auto" />
                                     <div className="space-y-2">
-                                        <p className="font-medium">¡Hola! Soy tu asistente financiero.</p>
+                                        <p className="font-medium">¡Hola! Soy el cerebro financiero de tu app.</p>
                                         <p className="text-sm text-muted-foreground px-4">
-                                            ¿Tienes un resumen bancario o de tarjeta que no entiendes? <br />
-                                            Dime "Tengo un resumen" y te ayudaré a auditarlo paso a paso.
+                                            Tengo contexto de transacciones, deudas, obligaciones, metas, presupuestos y recurrencias.
+                                            Pídeme recordatorios, prioridades de pago y sugerencias concretas.
                                         </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-center gap-2 px-4">
+                                        {quickPrompts.map((prompt) => (
+                                            <Button
+                                                key={prompt}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-xs"
+                                                onClick={() => handleSend(prompt)}
+                                                disabled={isLoading}
+                                            >
+                                                {prompt}
+                                            </Button>
+                                        ))}
                                     </div>
                                 </div>
                             )}
