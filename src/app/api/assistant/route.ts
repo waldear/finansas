@@ -30,9 +30,11 @@ type QuickAction =
         payload: {
             type: 'income' | 'expense';
             amount: number;
+            currency?: 'ARS' | 'USD';
             description: string;
             category: string;
             date: string;
+            card_brand?: 'visa' | 'mastercard' | 'amex' | 'unknown';
         };
     }
     | {
@@ -46,10 +48,24 @@ type QuickAction =
             category: string;
             next_payment_date: string;
         };
+    }
+    | {
+        type: 'installment_plan';
+        payload: {
+            plan_name: string;
+            total_installments: number;
+            upfront_ars_amount: number;
+            upfront_usd_amount: number;
+            future_installments: number;
+            future_installment_amount_ars: number;
+            paid_date: string;
+            was_paid_now: boolean;
+            card_brand: 'visa' | 'mastercard' | 'amex' | 'unknown';
+        };
     };
 
 type AppliedAction = {
-    type: 'transaction' | 'debt';
+    type: 'transaction' | 'debt' | 'obligation';
     id: string;
     summary: string;
 };
@@ -118,6 +134,92 @@ function parseLocalizedAmount(value: string) {
     return amount;
 }
 
+function addMonthsIsoDate(dateValue: string, monthsToAdd: number) {
+    const base = new Date(`${dateValue}T00:00:00.000Z`);
+    if (Number.isNaN(base.getTime())) return isoToday();
+
+    const day = base.getUTCDate();
+    base.setUTCDate(1);
+    base.setUTCMonth(base.getUTCMonth() + monthsToAdd);
+    const monthLastDay = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate();
+    base.setUTCDate(Math.min(day, monthLastDay));
+    return base.toISOString().split('T')[0];
+}
+
+function detectCardBrand(rawMessage: string): 'visa' | 'mastercard' | 'amex' | 'unknown' {
+    const normalized = normalizeText(rawMessage);
+    if (/\bvisa\b/.test(normalized)) return 'visa';
+    if (/\bmaster\b|\bmastercard\b/.test(normalized)) return 'mastercard';
+    if (/\bamex\b|\bamerican express\b/.test(normalized)) return 'amex';
+    return 'unknown';
+}
+
+function extractAmountsByCurrency(rawMessage: string) {
+    const matcher = /(u\$s|us\$|usd|\$)\s*([0-9][0-9.,]*)/gi;
+    const entries: Array<{ currency: 'ARS' | 'USD'; amount: number }> = [];
+    let match: RegExpExecArray | null = null;
+
+    while ((match = matcher.exec(rawMessage)) !== null) {
+        const marker = normalizeText(match[1] || '');
+        const currency = marker.includes('u$s') || marker.includes('us$') || marker.includes('usd') ? 'USD' : 'ARS';
+        const amount = parseLocalizedAmount(match[2] || '');
+        if (!amount) continue;
+
+        entries.push({
+            currency,
+            amount,
+        });
+    }
+
+    return entries;
+}
+
+function parseInstallmentPlanFromMessage(rawMessage: string) {
+    const normalized = normalizeText(rawMessage);
+    const planSignal = /\bplan\b|\bcuotas?\b/.test(normalized);
+    const installmentsMatch = normalized.match(/(\d{1,3})\s*cuotas?\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/i);
+    const rawInstallmentsMatch = rawMessage.match(/(\d{1,3})\s*cuotas?\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/i);
+    if (!planSignal || !installmentsMatch) return null;
+
+    const futureInstallments = Number(installmentsMatch[1]);
+    const futureInstallmentAmountArs = parseLocalizedAmount(installmentsMatch[2]);
+    if (!futureInstallments || !futureInstallmentAmountArs) return null;
+
+    const totalInstallmentsMatch = normalized.match(/en\s+(\d{1,3})\b/i);
+    const totalInstallments = totalInstallmentsMatch?.[1]
+        ? Math.max(Number(totalInstallmentsMatch[1]), futureInstallments)
+        : futureInstallments + 1;
+
+    const planNameMatch = rawMessage.match(/(plan\s+[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ.\-_ ]{1,50})/i);
+    const planName = planNameMatch?.[1]?.trim() || 'Plan en cuotas';
+
+    const upfrontSourceText = rawInstallmentsMatch?.index != null
+        ? rawMessage.slice(0, rawInstallmentsMatch.index)
+        : rawMessage;
+    const upfrontAmounts = extractAmountsByCurrency(upfrontSourceText);
+    const allAmounts = extractAmountsByCurrency(rawMessage);
+
+    const upfrontArsAmount = upfrontAmounts.find((item) => item.currency === 'ARS')?.amount || 0;
+    const upfrontUsdAmount = upfrontAmounts.find((item) => item.currency === 'USD')?.amount
+        || allAmounts.find((item) => item.currency === 'USD')?.amount
+        || 0;
+    const paidDate = extractIsoDateFromText(rawMessage);
+    const wasPaidNow = /\b(pague|pague|pago|pagado|debitaron|debitado|me cobraron|cobro)\b/i.test(normalized);
+    const cardBrand = detectCardBrand(rawMessage);
+
+    return {
+        plan_name: planName,
+        total_installments: totalInstallments,
+        upfront_ars_amount: upfrontArsAmount,
+        upfront_usd_amount: upfrontUsdAmount,
+        future_installments: futureInstallments,
+        future_installment_amount_ars: futureInstallmentAmountArs,
+        paid_date: paidDate,
+        was_paid_now: wasPaidNow,
+        card_brand: cardBrand,
+    };
+}
+
 function isoToday() {
     return new Date().toISOString().split('T')[0];
 }
@@ -130,6 +232,16 @@ function extractIsoDateFromText(rawMessage: string) {
     if (localMatch) {
         const [, day, month, year] = localMatch;
         return `${year}-${month}-${day}`;
+    }
+
+    const thisMonthMatch = rawMessage.match(/\b(?:el\s+)?(\d{1,2})\s+de\s+este\s+mes\b/i);
+    if (thisMonthMatch?.[1]) {
+        const day = Number(thisMonthMatch[1]);
+        if (day >= 1 && day <= 31) {
+            const now = new Date();
+            const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day));
+            return candidate.toISOString().split('T')[0];
+        }
     }
 
     return isoToday();
@@ -169,6 +281,8 @@ function inferQuickAction(message: string): QuickAction | null {
 
         const description = body.replace(amountMatch?.[1] || '', '').trim() || 'Registro desde asistente';
         const date = extractIsoDateFromText(body);
+        const isUsdAmount = /\b(u\$s|us\$|usd)\b/i.test(body);
+        const cardBrand = detectCardBrand(body);
 
         if (command === 'deuda') {
             const installmentsMatch = body.match(/(\d{1,3})\s*cuotas?/i);
@@ -196,16 +310,28 @@ function inferQuickAction(message: string): QuickAction | null {
             payload: {
                 type: kind,
                 amount,
+                currency: isUsdAmount ? 'USD' : 'ARS',
                 description,
                 category: categoryFromDescription(kind, description),
                 date,
+                card_brand: cardBrand,
             },
         };
     }
 
-    const expenseMatch = normalized.match(/(?:gaste|gasto|pague|pago|compre|compro|me debitaron|debitaron|me cobraron|cobraron)\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/);
-    if (expenseMatch?.[1]) {
-        const amount = parseLocalizedAmount(expenseMatch[1]);
+    const installmentPlan = parseInstallmentPlanFromMessage(raw);
+    if (installmentPlan) {
+        return {
+            type: 'installment_plan',
+            payload: installmentPlan,
+        };
+    }
+
+    const expenseUsdMatch = raw.match(/(?:gaste|gasto|pague|pago|compre|compro|me debitaron|debitaron|me cobraron|cobraron)\s*(?:de)?\s*(?:u\$s|us\$|usd)\s*([0-9][0-9.,]*)/i);
+    const expenseArsMatch = normalized.match(/(?:gaste|gasto|pague|pago|compre|compro|me debitaron|debitaron|me cobraron|cobraron)\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/);
+    if (expenseUsdMatch?.[1] || expenseArsMatch?.[1]) {
+        const isUsd = Boolean(expenseUsdMatch?.[1]);
+        const amount = parseLocalizedAmount((expenseUsdMatch?.[1] || expenseArsMatch?.[1]) as string);
         if (!amount) return null;
 
         const categoryPhrase = raw.match(/(?:en|de)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s-]{3,60})/);
@@ -217,16 +343,20 @@ function inferQuickAction(message: string): QuickAction | null {
             payload: {
                 type: 'expense',
                 amount,
+                currency: isUsd ? 'USD' : 'ARS',
                 description: `Gasto informado: ${description}`,
                 category,
                 date: extractIsoDateFromText(raw),
+                card_brand: detectCardBrand(raw),
             },
         };
     }
 
-    const incomeMatch = normalized.match(/(?:ingrese|ingreso|cobre|cobro|recibi|recibo|me depositaron|depositaron)\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/);
-    if (incomeMatch?.[1]) {
-        const amount = parseLocalizedAmount(incomeMatch[1]);
+    const incomeUsdMatch = raw.match(/(?:ingrese|ingreso|cobre|cobro|recibi|recibo|me depositaron|depositaron)\s*(?:de)?\s*(?:u\$s|us\$|usd)\s*([0-9][0-9.,]*)/i);
+    const incomeArsMatch = normalized.match(/(?:ingrese|ingreso|cobre|cobro|recibi|recibo|me depositaron|depositaron)\s*(?:de)?\s*\$?\s*([0-9][0-9.,]*)/);
+    if (incomeUsdMatch?.[1] || incomeArsMatch?.[1]) {
+        const isUsd = Boolean(incomeUsdMatch?.[1]);
+        const amount = parseLocalizedAmount((incomeUsdMatch?.[1] || incomeArsMatch?.[1]) as string);
         if (!amount) return null;
 
         const categoryPhrase = raw.match(/(?:por|de)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s-]{3,60})/);
@@ -238,9 +368,11 @@ function inferQuickAction(message: string): QuickAction | null {
             payload: {
                 type: 'income',
                 amount,
+                currency: isUsd ? 'USD' : 'ARS',
                 description: `Ingreso informado: ${description}`,
                 category,
                 date: extractIsoDateFromText(raw),
+                card_brand: detectCardBrand(raw),
             },
         };
     }
@@ -315,6 +447,93 @@ async function persistChatEvent(params: {
     }
 }
 
+function parseEnvNumber(value: string | undefined, fallback: number) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getDefaultTaxPercent() {
+    const countryTax = parseEnvNumber(process.env.ARG_TAX_PAIS_PERCENT, 30);
+    const incomeTax = parseEnvNumber(process.env.ARG_TAX_GANANCIAS_PERCENT, 30);
+    const extraTax = parseEnvNumber(process.env.ARG_TAX_CARD_EXTRA_PERCENT, 0);
+    return countryTax + incomeTax + extraTax;
+}
+
+function cardSpecificExtraPercent(cardBrand: 'visa' | 'mastercard' | 'amex' | 'unknown') {
+    if (cardBrand === 'visa') return parseEnvNumber(process.env.ARG_CARD_EXTRA_PERCENT_VISA, 0);
+    if (cardBrand === 'mastercard') return parseEnvNumber(process.env.ARG_CARD_EXTRA_PERCENT_MASTERCARD, 0);
+    if (cardBrand === 'amex') return parseEnvNumber(process.env.ARG_CARD_EXTRA_PERCENT_AMEX, 0);
+    return 0;
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs = 3500) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
+        });
+
+        if (!response.ok) return null;
+        return await response.json().catch(() => null);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function convertUsdToArs(params: {
+    usdAmount: number;
+    cardBrand: 'visa' | 'mastercard' | 'amex' | 'unknown';
+}) {
+    const { usdAmount, cardBrand } = params;
+
+    if (usdAmount <= 0) {
+        return {
+            arsAmount: 0,
+            rateUsed: 0,
+            source: 'none',
+            taxesAppliedPercent: 0,
+            cardBrand,
+        };
+    }
+
+    const cardRateResponse = await fetchJsonWithTimeout('https://dolarapi.com/v1/dolares/tarjeta');
+    const apiCardRate = Number(cardRateResponse?.venta);
+    const cardExtra = cardSpecificExtraPercent(cardBrand);
+
+    if (Number.isFinite(apiCardRate) && apiCardRate > 0) {
+        const effectiveRate = apiCardRate * (1 + cardExtra / 100);
+        return {
+            arsAmount: usdAmount * effectiveRate,
+            rateUsed: effectiveRate,
+            source: 'dolarapi_tarjeta',
+            taxesAppliedPercent: cardExtra,
+            cardBrand,
+        };
+    }
+
+    const officialRateResponse = await fetchJsonWithTimeout('https://dolarapi.com/v1/dolares/oficial');
+    const apiOfficialRate = Number(officialRateResponse?.venta);
+    const fallbackOfficialRate = parseEnvNumber(process.env.ARG_USD_OFFICIAL_RATE, 1250);
+    const officialRate = Number.isFinite(apiOfficialRate) && apiOfficialRate > 0
+        ? apiOfficialRate
+        : fallbackOfficialRate;
+
+    const taxesPercent = getDefaultTaxPercent() + cardExtra;
+    const effectiveRate = officialRate * (1 + taxesPercent / 100);
+
+    return {
+        arsAmount: usdAmount * effectiveRate,
+        rateUsed: effectiveRate,
+        source: Number.isFinite(apiOfficialRate) && apiOfficialRate > 0 ? 'dolarapi_oficial_plus_taxes' : 'env_fallback_plus_taxes',
+        taxesAppliedPercent: taxesPercent,
+        cardBrand,
+    };
+}
+
 async function applyQuickAction(params: {
     supabase: SupabaseClient;
     userId: string;
@@ -324,11 +543,175 @@ async function applyQuickAction(params: {
     const detectedAction = inferQuickAction(message);
     if (!detectedAction) return [] as AppliedAction[];
 
+    if (detectedAction.type === 'installment_plan') {
+        const actions: AppliedAction[] = [];
+        const payload = detectedAction.payload;
+
+        const conversion = await convertUsdToArs({
+            usdAmount: payload.upfront_usd_amount,
+            cardBrand: payload.card_brand,
+        });
+
+        const upfrontTotalArs = payload.upfront_ars_amount + conversion.arsAmount;
+
+        if (payload.was_paid_now && upfrontTotalArs > 0) {
+            const descriptionSegments = [
+                `${payload.plan_name} - pago inicial`,
+                payload.upfront_ars_amount > 0 ? `ARS ${payload.upfront_ars_amount.toFixed(2)}` : null,
+                payload.upfront_usd_amount > 0
+                    ? `USD ${payload.upfront_usd_amount.toFixed(2)} → ARS ${conversion.arsAmount.toFixed(2)} (TC ${conversion.rateUsed.toFixed(2)}${conversion.taxesAppliedPercent ? `, imp. ${conversion.taxesAppliedPercent.toFixed(1)}%` : ''})`
+                    : null,
+            ]
+                .filter(Boolean)
+                .join(' | ');
+
+            const { data: transaction, error: transactionError } = await supabase
+                .from('transactions')
+                .insert({
+                    user_id: userId,
+                    type: 'expense',
+                    amount: Number(upfrontTotalArs.toFixed(2)),
+                    category: 'Tarjeta',
+                    description: descriptionSegments,
+                    date: payload.paid_date,
+                })
+                .select()
+                .single();
+
+            if (transactionError || !transaction) {
+                throw new Error(`No se pudo registrar el pago inicial del plan: ${transactionError?.message || 'sin detalles'}`);
+            }
+
+            await recordAuditEvent({
+                supabase,
+                userId,
+                entityType: 'transaction',
+                entityId: transaction.id,
+                action: 'create',
+                afterData: transaction,
+                metadata: {
+                    source: 'assistant_installment_plan',
+                    fx_source: conversion.source,
+                    fx_rate: conversion.rateUsed,
+                    fx_taxes_percent: conversion.taxesAppliedPercent,
+                    usd_amount: payload.upfront_usd_amount,
+                    ars_amount: payload.upfront_ars_amount,
+                },
+            });
+
+            actions.push({
+                type: 'transaction',
+                id: transaction.id,
+                summary: `Pago inicial registrado por ${formatMoney(Number(upfrontTotalArs.toFixed(2)))}${payload.upfront_usd_amount > 0 ? ` (incluye USD ${payload.upfront_usd_amount.toFixed(2)})` : ''}.`,
+            });
+        }
+
+        if (payload.future_installments > 0 && payload.future_installment_amount_ars > 0) {
+            const totalFutureAmount = payload.future_installments * payload.future_installment_amount_ars;
+            const nextPaymentDate = addMonthsIsoDate(payload.paid_date, 1);
+
+            const { data: debt, error: debtError } = await supabase
+                .from('debts')
+                .insert({
+                    user_id: userId,
+                    name: `${payload.plan_name} (cuotas pendientes)`,
+                    total_amount: Number(totalFutureAmount.toFixed(2)),
+                    monthly_payment: Number(payload.future_installment_amount_ars.toFixed(2)),
+                    remaining_installments: payload.future_installments,
+                    total_installments: payload.total_installments,
+                    category: 'Tarjeta',
+                    next_payment_date: nextPaymentDate,
+                })
+                .select()
+                .single();
+
+            if (!debtError && debt) {
+                await recordAuditEvent({
+                    supabase,
+                    userId,
+                    entityType: 'debt',
+                    entityId: debt.id,
+                    action: 'create',
+                    afterData: debt,
+                    metadata: {
+                        source: 'assistant_installment_plan',
+                    },
+                });
+
+                actions.push({
+                    type: 'debt',
+                    id: debt.id,
+                    summary: `Deuda creada por ${payload.future_installments} cuota(s) de ${formatMoney(payload.future_installment_amount_ars)}.`,
+                });
+            } else {
+                logWarn('assistant_installment_plan_debt_warning', {
+                    userId,
+                    reason: debtError?.message || 'No se pudo crear deuda',
+                });
+            }
+
+            const obligationsPayload = Array.from({ length: payload.future_installments }).map((_, index) => ({
+                user_id: userId,
+                title: `${payload.plan_name} - cuota ${index + 1}/${payload.future_installments}`,
+                amount: Number(payload.future_installment_amount_ars.toFixed(2)),
+                due_date: addMonthsIsoDate(payload.paid_date, index + 1),
+                status: 'pending' as const,
+                category: 'Tarjeta',
+                minimum_payment: Number(payload.future_installment_amount_ars.toFixed(2)),
+            }));
+
+            const { data: obligations, error: obligationsError } = await supabase
+                .from('obligations')
+                .insert(obligationsPayload)
+                .select('id');
+
+            if (!obligationsError && obligations?.length) {
+                actions.push({
+                    type: 'obligation',
+                    id: obligations[0].id,
+                    summary: `Se programaron ${obligations.length} vencimientos futuros para ${payload.plan_name}.`,
+                });
+            } else if (obligationsError) {
+                logWarn('assistant_installment_plan_obligations_warning', {
+                    userId,
+                    reason: obligationsError.message,
+                });
+            }
+        }
+
+        return actions;
+    }
+
     if (detectedAction.type === 'transaction') {
+        let persistedAmount = detectedAction.payload.amount;
+        let convertedDescriptionSuffix = '';
+        let fxMetadata: Record<string, unknown> | null = null;
+
+        if (detectedAction.payload.currency === 'USD') {
+            const conversion = await convertUsdToArs({
+                usdAmount: detectedAction.payload.amount,
+                cardBrand: detectedAction.payload.card_brand || detectCardBrand(message),
+            });
+            persistedAmount = Number(conversion.arsAmount.toFixed(2));
+            convertedDescriptionSuffix = ` | USD ${detectedAction.payload.amount.toFixed(2)} convertido a ARS (TC ${conversion.rateUsed.toFixed(2)}${conversion.taxesAppliedPercent ? `, imp. ${conversion.taxesAppliedPercent.toFixed(1)}%` : ''})`;
+            fxMetadata = {
+                source: conversion.source,
+                rate: conversion.rateUsed,
+                taxes_percent: conversion.taxesAppliedPercent,
+                card_brand: conversion.cardBrand,
+                original_currency: 'USD',
+                original_amount: detectedAction.payload.amount,
+            };
+        }
+
         const { data, error } = await supabase
             .from('transactions')
             .insert({
-                ...detectedAction.payload,
+                type: detectedAction.payload.type,
+                amount: persistedAmount,
+                description: `${detectedAction.payload.description}${convertedDescriptionSuffix}`,
+                category: detectedAction.payload.category,
+                date: detectedAction.payload.date,
                 user_id: userId,
             })
             .select()
@@ -347,13 +730,14 @@ async function applyQuickAction(params: {
             afterData: data,
             metadata: {
                 source: 'assistant_quick_action',
+                ...(fxMetadata || {}),
             },
         });
 
         return [{
             type: 'transaction' as const,
             id: data.id,
-            summary: `${detectedAction.payload.type === 'income' ? 'Ingreso' : 'Gasto'} ${formatMoney(detectedAction.payload.amount)} en ${detectedAction.payload.category}`,
+            summary: `${detectedAction.payload.type === 'income' ? 'Ingreso' : 'Gasto'} ${formatMoney(persistedAmount)} en ${detectedAction.payload.category}${detectedAction.payload.currency === 'USD' ? ` (original USD ${detectedAction.payload.amount.toFixed(2)})` : ''}`,
         }];
     }
 
