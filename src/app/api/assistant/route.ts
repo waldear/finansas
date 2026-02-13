@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { generateGeminiContentWithFallback } from '@/lib/gemini';
 import { recordAuditEvent } from '@/lib/audit';
+import { estimateTokenCount, recordAssistantUsageEvent, resolveAssistantEntitlement } from '@/lib/assistant-entitlements';
 
 type AssistantRequestPayload = {
     message?: string;
@@ -1009,9 +1010,13 @@ function formatMoney(value: number) {
 export async function POST(req: Request) {
     const logContext = createRequestContext('/api/assistant', 'POST');
     const startedAt = Date.now();
+    let supabase: SupabaseClient | null = null;
+    let userId: string | null = null;
+    let userMessage = '';
+    let entitlementSnapshot: Awaited<ReturnType<typeof resolveAssistantEntitlement>> | null = null;
 
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         if (!supabase) {
             return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
         }
@@ -1020,14 +1025,64 @@ export async function POST(req: Request) {
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        userId = user.id;
 
         const body = (await req.json().catch(() => ({}))) as AssistantRequestPayload;
         const message = typeof body.message === 'string' ? body.message.trim() : '';
         if (!message) {
             return NextResponse.json({ error: 'Mensaje requerido' }, { status: 400 });
         }
+        userMessage = message;
 
         const documentContext = sanitizeDocumentContext(body.documentContext);
+        entitlementSnapshot = await resolveAssistantEntitlement({
+            supabase,
+            userId: user.id,
+            requestContext: logContext,
+        });
+
+        if (entitlementSnapshot.blockedReason) {
+            await recordAssistantUsageEvent({
+                supabase,
+                userId: user.id,
+                requestId: logContext.requestId as string,
+                plan: entitlementSnapshot.plan,
+                status: 'blocked',
+                blockedReason: entitlementSnapshot.blockedReason,
+                metadata: {
+                    limitRequests: entitlementSnapshot.limitRequests,
+                    usedRequests: entitlementSnapshot.usedRequests,
+                    remainingRequests: entitlementSnapshot.remainingRequests,
+                },
+            });
+
+            logInfo('assistant_usage_blocked', {
+                ...logContext,
+                userId: user.id,
+                reason: entitlementSnapshot.blockedReason,
+                usedRequests: entitlementSnapshot.usedRequests,
+                limitRequests: entitlementSnapshot.limitRequests,
+                durationMs: Date.now() - startedAt,
+            });
+
+            return NextResponse.json({
+                text: 'Alcanzaste el límite mensual del asistente en tu plan actual. Para seguir usando IA sin restricciones, activa Finansas Pro.',
+                actionsApplied: [],
+                billing: {
+                    plan: entitlementSnapshot.plan,
+                    status: entitlementSnapshot.status,
+                    provider: entitlementSnapshot.provider,
+                    requiresUpgrade: entitlementSnapshot.plan !== 'pro',
+                    usage: {
+                        usedRequests: entitlementSnapshot.usedRequests,
+                        limitRequests: entitlementSnapshot.limitRequests,
+                        remainingRequests: entitlementSnapshot.remainingRequests,
+                        periodStart: entitlementSnapshot.periodStartIso,
+                        periodEnd: entitlementSnapshot.periodEndIso,
+                    },
+                },
+            });
+        }
 
         const geminiApiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
         if (!geminiApiKey) {
@@ -1250,9 +1305,7 @@ Prioriza:
 - riesgo de liquidez (si balance es bajo frente a obligaciones)
 `;
 
-        const { text, modelName } = await generateGeminiContentWithFallback({
-            apiKey: geminiApiKey,
-            request: `
+        const generationRequest = `
 ${systemPrompt}
 
 Fecha de referencia (UTC): ${new Date().toISOString()}
@@ -1262,7 +1315,11 @@ ${JSON.stringify(assistantContext)}
 
 MENSAJE DEL USUARIO:
 ${message}
-`,
+`;
+
+        const { text, modelName, usage } = await generateGeminiContentWithFallback({
+            apiKey: geminiApiKey,
+            request: generationRequest,
         });
 
         await persistChatEvent({
@@ -1274,11 +1331,36 @@ ${message}
             documentContext,
         });
 
+        const promptTokens = usage?.promptTokenCount || estimateTokenCount(generationRequest);
+        const completionTokens = usage?.candidatesTokenCount || estimateTokenCount(text);
+        const totalTokens = usage?.totalTokenCount || (promptTokens + completionTokens);
+        await recordAssistantUsageEvent({
+            supabase,
+            userId: user.id,
+            requestId: logContext.requestId as string,
+            plan: entitlementSnapshot.plan,
+            status: 'completed',
+            model: modelName,
+            promptTokens,
+            completionTokens,
+            totalTokens,
+            metadata: {
+                actionsApplied: actionsApplied.length,
+                hasDocumentContext: Boolean(documentContext),
+            },
+        });
+
+        const usedRequests = entitlementSnapshot.usedRequests + 1;
+        const remainingRequests = Math.max(0, entitlementSnapshot.limitRequests - usedRequests);
+
         logInfo('assistant_response_generated', {
             ...logContext,
             userId: user.id,
             model: modelName,
             actionsApplied: actionsApplied.length,
+            plan: entitlementSnapshot.plan,
+            usedRequests,
+            limitRequests: entitlementSnapshot.limitRequests,
             remindersCount: reminders.length,
             transactionsInContext: transactions.length,
             durationMs: Date.now() - startedAt,
@@ -1287,8 +1369,42 @@ ${message}
         return NextResponse.json({
             text,
             actionsApplied,
+            billing: {
+                plan: entitlementSnapshot.plan,
+                status: entitlementSnapshot.status,
+                provider: entitlementSnapshot.provider,
+                requiresUpgrade: false,
+                usage: {
+                    usedRequests,
+                    limitRequests: entitlementSnapshot.limitRequests,
+                    remainingRequests,
+                    periodStart: entitlementSnapshot.periodStartIso,
+                    periodEnd: entitlementSnapshot.periodEndIso,
+                },
+            },
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
+        if (supabase && userId && entitlementSnapshot) {
+            try {
+                await recordAssistantUsageEvent({
+                    supabase,
+                    userId,
+                    requestId: logContext.requestId as string,
+                    plan: entitlementSnapshot.plan,
+                    status: 'failed',
+                    promptTokens: estimateTokenCount(userMessage),
+                    completionTokens: 0,
+                    totalTokens: estimateTokenCount(userMessage),
+                    blockedReason: 'runtime_error',
+                    metadata: {
+                        reason: error instanceof Error ? error.message : String(error),
+                    },
+                });
+            } catch {
+                // no-op: fail-soft on usage telemetry
+            }
+        }
+
         logError('assistant_exception', error, {
             ...logContext,
             durationMs: Date.now() - startedAt,
@@ -1296,6 +1412,21 @@ ${message}
         return NextResponse.json({
             text: 'Lo siento, tuve un problema al procesar tu solicitud. Intenta de nuevo más tarde.',
             actionsApplied: [],
+            billing: entitlementSnapshot
+                ? {
+                    plan: entitlementSnapshot.plan,
+                    status: entitlementSnapshot.status,
+                    provider: entitlementSnapshot.provider,
+                    requiresUpgrade: false,
+                    usage: {
+                        usedRequests: entitlementSnapshot.usedRequests,
+                        limitRequests: entitlementSnapshot.limitRequests,
+                        remainingRequests: entitlementSnapshot.remainingRequests,
+                        periodStart: entitlementSnapshot.periodStartIso,
+                        periodEnd: entitlementSnapshot.periodEndIso,
+                    },
+                }
+                : null,
         });
     }
 }

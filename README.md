@@ -42,6 +42,11 @@ npm install
    - `supabase-copilot.sql`
    - `supabase-advanced.sql`
 
+`supabase-advanced.sql` también crea la base para suscripciones Pro:
+- `user_entitlements`
+- `assistant_usage_events`
+- `billing_events`
+
 4. Levantar en local:
 
 ```bash
@@ -61,6 +66,9 @@ Opcionales:
 
 - `SENTRY_DSN`
 - `SENTRY_TRACES_SAMPLE_RATE`
+- `GEMINI_MODEL` (default recomendado: `gemini-2.5-flash`)
+- `ASSISTANT_FREE_MONTHLY_REQUEST_LIMIT` (default `40`)
+- `ASSISTANT_PRO_MONTHLY_REQUEST_LIMIT` (default `1200`)
 
 ## Scripts
 
@@ -85,6 +93,15 @@ Opcionales:
   - env críticas
   - tablas clave
   - bucket `documents`
+
+## Pro / Billing (Base)
+
+- `GET /api/billing/entitlement` devuelve plan y uso mensual del asistente para el usuario autenticado.
+- `POST /api/billing/events` procesa webhooks de billing (App Store / Play / Stripe) con `x-billing-webhook-secret`.
+- La ruta `/api/assistant` aplica límite mensual por plan usando:
+  - `user_entitlements`
+  - `assistant_usage_events`
+  - `billing_events`
 
 ## Deploy en Vercel
 

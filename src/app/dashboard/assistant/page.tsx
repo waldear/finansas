@@ -27,6 +27,20 @@ type AssistantDocumentContext = {
     extraction: any;
 };
 
+type AssistantBilling = {
+    plan: 'free' | 'pro';
+    status: string;
+    provider: string;
+    requiresUpgrade: boolean;
+    usage: {
+        usedRequests: number;
+        limitRequests: number;
+        remainingRequests: number;
+        periodStart: string;
+        periodEnd: string;
+    };
+};
+
 function formatFileSize(bytes: number) {
     if (bytes >= 1024 * 1024) {
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
@@ -55,6 +69,7 @@ export default function AssistantPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+    const [billing, setBilling] = useState<AssistantBilling | null>(null);
 
     useEffect(() => {
         const loadHistory = async () => {
@@ -85,6 +100,36 @@ export default function AssistantPage() {
         };
 
         loadHistory();
+    }, []);
+
+    useEffect(() => {
+        const loadBilling = async () => {
+            try {
+                const response = await fetch('/api/billing/entitlement', {
+                    credentials: 'include',
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok || !payload) return;
+                setBilling({
+                    plan: payload.plan === 'pro' ? 'pro' : 'free',
+                    status: String(payload.status || 'active'),
+                    provider: String(payload.provider || 'none'),
+                    requiresUpgrade: Boolean(payload.plan !== 'pro' && payload.usage?.remainingRequests === 0),
+                    usage: {
+                        usedRequests: Number(payload.usage?.usedRequests || 0),
+                        limitRequests: Number(payload.usage?.limitRequests || 0),
+                        remainingRequests: Number(payload.usage?.remainingRequests || 0),
+                        periodStart: String(payload.usage?.periodStart || ''),
+                        periodEnd: String(payload.usage?.periodEnd || ''),
+                    },
+                });
+            } catch {
+                // no-op
+            }
+        };
+
+        loadBilling();
     }, []);
 
     const processAttachedDocument = async (file: File): Promise<AssistantDocumentContext> => {
@@ -217,6 +262,9 @@ export default function AssistantPage() {
             }
 
             setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+            if (data?.billing) {
+                setBilling(data.billing as AssistantBilling);
+            }
 
             if (Array.isArray(data?.actionsApplied) && data.actionsApplied.length > 0) {
                 await Promise.all([
@@ -243,9 +291,16 @@ export default function AssistantPage() {
         <div className="mx-auto flex h-[calc(100dvh-11.5rem)] min-h-[32rem] w-full max-w-4xl flex-col space-y-4 md:h-[calc(100vh-10rem)]">
             <Card className="flex-1 flex flex-col min-h-0 border-none shadow-lg">
                 <CardHeader className="border-b bg-primary/5">
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
                         <Brain className="h-5 w-5 text-primary" />
                         Asistente Inteligente
+                        </span>
+                        {billing && (
+                            <span className="text-xs font-medium text-muted-foreground">
+                                {billing.plan.toUpperCase()} · {billing.usage.remainingRequests}/{billing.usage.limitRequests} restantes
+                            </span>
+                        )}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden p-0">

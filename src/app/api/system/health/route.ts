@@ -15,6 +15,8 @@ export async function GET() {
         // Check key
         const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
         const hasSentry = !!(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);
+        const hasServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const hasBillingWebhookSecret = !!process.env.BILLING_WEBHOOK_SECRET;
 
         // Check tables - using HEAD request to check existence
         const obligations = await supabase.from('obligations').select('*', { count: 'exact', head: true }).limit(1);
@@ -23,6 +25,9 @@ export async function GET() {
         const budgets = await supabase.from('budgets').select('*', { count: 'exact', head: true }).limit(1);
         const recurring = await supabase.from('recurring_transactions').select('*', { count: 'exact', head: true }).limit(1);
         const audit = await supabase.from('audit_events').select('*', { count: 'exact', head: true }).limit(1);
+        const entitlements = await supabase.from('user_entitlements').select('*', { count: 'exact', head: true }).limit(1);
+        const assistantUsage = await supabase.from('assistant_usage_events').select('*', { count: 'exact', head: true }).limit(1);
+        const billingEvents = await supabase.from('billing_events').select('*', { count: 'exact', head: true }).limit(1);
         const bucketProbe = await supabase.storage
             .from('documents')
             .list('', { limit: 1 });
@@ -36,6 +41,8 @@ export async function GET() {
             env: {
                 GEMINI_API_KEY: hasGeminiKey,
                 SENTRY_DSN: hasSentry,
+                SUPABASE_SERVICE_ROLE_KEY: hasServiceRole,
+                BILLING_WEBHOOK_SECRET: hasBillingWebhookSecret,
             },
             db: {
                 obligations_table: !obligations.error,
@@ -44,6 +51,9 @@ export async function GET() {
                 budgets_table: !budgets.error,
                 recurring_table: !recurring.error,
                 audit_table: !audit.error,
+                entitlements_table: !entitlements.error,
+                assistant_usage_table: !assistantUsage.error,
+                billing_events_table: !billingEvents.error,
                 storage_bucket: !bucketProbe.error,
             },
             debug: {
@@ -53,6 +63,9 @@ export async function GET() {
                 budgets_error: budgets.error?.message || null,
                 recurring_error: recurring.error?.message || null,
                 audit_error: audit.error?.message || null,
+                entitlements_error: entitlements.error?.message || null,
+                assistant_usage_error: assistantUsage.error?.message || null,
+                billing_events_error: billingEvents.error?.message || null,
                 storage_error: bucketProbe.error?.message || null,
                 url: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 15) + "..."
             }
