@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
+import { sanitizeEnv } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +30,11 @@ export default function AuthPage() {
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
 
-    const buildCallbackUrl = () => `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    const buildCallbackUrl = () => {
+        const siteUrl = sanitizeEnv(process.env.NEXT_PUBLIC_SITE_URL);
+        const baseUrl = siteUrl || window.location.origin;
+        return `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+    };
 
     useEffect(() => {
         if (!supabase) return;
