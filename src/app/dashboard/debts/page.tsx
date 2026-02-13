@@ -20,6 +20,31 @@ export default function DebtsPage() {
         }).format(amount);
     };
 
+    const getDueBadge = (nextPaymentDate: string) => {
+        const today = new Date();
+        const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const due = new Date(`${nextPaymentDate}T00:00:00`);
+        const diff = Math.ceil((due.getTime() - current.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (Number.isNaN(diff)) {
+            return { label: 'Sin fecha válida', className: 'text-muted-foreground' };
+        }
+
+        if (diff < 0) {
+            return { label: `Vencida ${Math.abs(diff)} día(s)`, className: 'text-destructive font-semibold' };
+        }
+
+        if (diff === 0) {
+            return { label: 'Vence hoy', className: 'text-amber-500 font-semibold' };
+        }
+
+        if (diff <= 3) {
+            return { label: `Vence en ${diff} día(s)`, className: 'text-amber-500 font-semibold' };
+        }
+
+        return { label: `Vence en ${diff} día(s)`, className: 'text-muted-foreground' };
+    };
+
     const handleConfirmPayment = async (debtId: string) => {
         setProcessingDebtId(debtId);
         try {
@@ -55,6 +80,7 @@ export default function DebtsPage() {
                                     const remainingInstallments = Number(debt.remaining_installments || 0);
                                     const isSettled = totalAmount <= 0 || remainingInstallments <= 0;
                                     const isProcessing = isConfirmingDebtPayment && processingDebtId === debt.id;
+                                    const dueBadge = getDueBadge(String(debt.next_payment_date));
 
                                     return (
                                     <div key={debt.id} className="p-4 border rounded-lg space-y-3">
@@ -86,6 +112,9 @@ export default function DebtsPage() {
                                             <ArrowRight className="w-3 h-3" />
                                             <span>Próximo vencimiento: {new Date(debt.next_payment_date).toLocaleDateString('es-AR')}</span>
                                         </div>
+                                        {!isSettled && (
+                                            <p className={`text-xs ${dueBadge.className}`}>{dueBadge.label}</p>
+                                        )}
 
                                         <Button
                                             type="button"

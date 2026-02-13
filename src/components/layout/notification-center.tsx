@@ -9,11 +9,8 @@ import {
     PopoverTrigger,
 } from '@/components/ui/popover';
 import { useCopilot } from '@/hooks/use-copilot';
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 
 export function NotificationCenter() {
     const { insight, isLoading } = useCopilot();

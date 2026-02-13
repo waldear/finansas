@@ -240,7 +240,7 @@ export default function AssistantPage() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-10rem)] max-w-4xl mx-auto space-y-4">
+        <div className="mx-auto flex h-[calc(100dvh-11.5rem)] min-h-[32rem] w-full max-w-4xl flex-col space-y-4 md:h-[calc(100vh-10rem)]">
             <Card className="flex-1 flex flex-col min-h-0 border-none shadow-lg">
                 <CardHeader className="border-b bg-primary/5">
                     <CardTitle className="flex items-center gap-2">
@@ -262,14 +262,14 @@ export default function AssistantPage() {
                                             También puedes registrar rápido con `/gasto`, `/ingreso` o `/deuda`.
                                         </p>
                                     </div>
-                                    <div className="flex flex-wrap items-center justify-center gap-2 px-4">
+                                    <div className="grid w-full gap-2 px-4 sm:grid-cols-2">
                                         {quickPrompts.map((prompt) => (
                                             <Button
                                                 key={prompt}
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className="text-xs"
+                                                className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
                                                 onClick={() => handleSend(prompt)}
                                                 disabled={isLoading}
                                             >
@@ -286,11 +286,11 @@ export default function AssistantPage() {
                             )}
                             {messages.map((m, i) => (
                                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl ${m.role === 'user'
+                                    <div className={`max-w-[92%] sm:max-w-[80%] p-3 rounded-2xl ${m.role === 'user'
                                         ? 'bg-primary text-primary-foreground rounded-tr-none'
                                         : 'bg-muted rounded-tl-none'
                                         }`}>
-                                        <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                                        <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
                                     </div>
                                 </div>
                             ))}
@@ -312,7 +312,7 @@ export default function AssistantPage() {
                     >
                         {attachedFile && (
                             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-xs">
-                                <div className="flex items-center gap-2 truncate">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
                                     {attachedFile.type.startsWith('image/') ? (
                                         <FileImage className="h-4 w-4 shrink-0 text-primary" />
                                     ) : (
@@ -334,7 +334,7 @@ export default function AssistantPage() {
                             </div>
                         )}
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -358,7 +358,7 @@ export default function AssistantPage() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 disabled={isLoading || isProcessingAttachment}
-                                className="flex-1 h-11"
+                                className="h-11 min-w-0 flex-1 basis-[12rem]"
                             />
                             <Button type="submit" size="icon" disabled={isLoading || isProcessingAttachment} className="h-11 w-11">
                                 {(isLoading || isProcessingAttachment) ? (

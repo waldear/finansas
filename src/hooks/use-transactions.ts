@@ -31,6 +31,7 @@ export function useTransactions() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
             toast.success('Transacción agregada correctamente');
         },
         onError: (error: any) => {

@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDashboard } from '@/hooks/use-dashboard';
 import { usePlanning } from '@/hooks/use-planning';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,16 +18,21 @@ import {
     ArrowDownLeft,
     PieChart,
     Activity,
-    AlertTriangle
+    AlertTriangle,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { DashboardSkeleton } from '@/components/layout/dashboard-skeleton';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
+const NET_WORTH_VISIBILITY_KEY = 'finansas-net-worth-visible';
+
 export default function DashboardPage() {
     const { debts, savingsGoals, transactions, isLoading } = useDashboard();
     const { budgets, recurringTransactions, runRecurring } = usePlanning();
     const recurringRanRef = useRef(false);
+    const [isNetWorthVisible, setIsNetWorthVisible] = useState(true);
 
     // Memoize expensive calculations
     const financialStats = useMemo(() => {
@@ -114,6 +119,29 @@ export default function DashboardPage() {
         runRecurring().catch(() => {});
     }, [runRecurring]);
 
+    useEffect(() => {
+        try {
+            const storedValue = window.localStorage.getItem(NET_WORTH_VISIBILITY_KEY);
+            if (storedValue === 'hidden') {
+                setIsNetWorthVisible(false);
+            }
+        } catch {
+            // no-op
+        }
+    }, []);
+
+    const toggleNetWorthVisibility = () => {
+        setIsNetWorthVisible((previous) => {
+            const next = !previous;
+            try {
+                window.localStorage.setItem(NET_WORTH_VISIBILITY_KEY, next ? 'visible' : 'hidden');
+            } catch {
+                // no-op
+            }
+            return next;
+        });
+    };
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
             style: 'currency',
@@ -140,10 +168,21 @@ export default function DashboardPage() {
 
             {/* HERO CARD - NET WORTH */}
             <div className="relative overflow-hidden rounded-[3rem] premium-gradient p-8 text-white neon-glow shadow-2xl transition-transform hover:scale-[1.01] duration-500">
+                <button
+                    type="button"
+                    onClick={toggleNetWorthVisibility}
+                    className="absolute right-6 top-6 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white backdrop-blur transition hover:bg-white/20"
+                    aria-label={isNetWorthVisible ? 'Ocultar patrimonio' : 'Mostrar patrimonio'}
+                    title={isNetWorthVisible ? 'Ocultar patrimonio' : 'Mostrar patrimonio'}
+                >
+                    {isNetWorthVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
                 <div className="relative z-10 flex flex-col items-center text-center space-y-4">
                     <p className="text-sm font-medium uppercase tracking-[0.2em] opacity-80">PATRIMONIO NETO TOTAL</p>
                     <div className="flex items-baseline">
-                        <span className="text-6xl font-black tracking-tighter">{formatCurrency(balance - totalDebt).split(',')[0]}</span>
+                        <span className="text-6xl font-black tracking-tighter">
+                            {isNetWorthVisible ? formatCurrency(balance - totalDebt).split(',')[0] : '$ ••••••'}
+                        </span>
                     </div>
                     <div className="flex items-center gap-2 px-4 py-1.5 glass rounded-full text-xs font-bold">
                         <TrendingUp className="h-4 w-4" />

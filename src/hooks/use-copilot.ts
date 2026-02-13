@@ -26,10 +26,25 @@ export interface CopilotInsight {
 interface Obligation {
     id: string;
     title: string;
-    amount: number;
+    amount: number | string;
     due_date: string;
     status: string;
     category: string;
+}
+
+function toNumber(value: unknown): number {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeText(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 export function useCopilot() {
@@ -43,7 +58,7 @@ export function useCopilot() {
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.error || 'Error al cargar obligaciones');
             const data = (body || []) as Obligation[];
-            return data.filter((obligation) => obligation.status === 'pending');
+            return data.filter((obligation) => obligation.status !== 'paid');
         },
         staleTime: 5 * 60 * 1000, // 5 minutes cache
         placeholderData: keepPreviousData,
@@ -61,18 +76,21 @@ export function useCopilot() {
         }
 
         // 1. Calculate basic cashflow (Last 30 days)
-        const now = new Date();
-
         let income = 0;
         let expenses = 0;
 
-        transactions.forEach(t => {
-            if (t.type === 'income') income += t.amount;
-            if (t.type === 'expense') expenses += t.amount;
+        transactions.forEach((transaction) => {
+            if (transaction.type === 'income') income += toNumber(transaction.amount);
+            if (transaction.type === 'expense') expenses += toNumber(transaction.amount);
         });
 
-        const totalObligations = (obligations || []).reduce((acc, curr) => acc + curr.amount, 0);
-        const monthlyDebtPayments = debts.reduce((acc, curr) => acc + curr.monthly_payment, 0);
+        const activeDebts = debts.filter((debt) => (
+            toNumber((debt as any).total_amount) > 0 &&
+            toNumber((debt as any).remaining_installments) > 0
+        ));
+        const openObligations = (obligations || []).filter((obligation) => obligation.status !== 'paid');
+        const totalObligations = openObligations.reduce((acc, obligation) => acc + toNumber(obligation.amount), 0);
+        const monthlyDebtPayments = activeDebts.reduce((acc, debt) => acc + toNumber((debt as any).monthly_payment), 0);
 
         // Simple "Capital Available" metric
         const capitalAvailable = income - (expenses + totalObligations + monthlyDebtPayments);
@@ -101,21 +119,68 @@ export function useCopilot() {
 
         // 3. Generate Actions based on Profile
         const actions: WeeklyAction[] = [];
+        const now = new Date();
+        const normalizedObligationTitles = new Set(
+            openObligations.map((obligation) => normalizeText(obligation.title || ''))
+        );
 
-        // Urgent: Overdue or near-due obligations
-        (obligations || []).forEach((obs) => {
-            const daysUntilDue = Math.ceil((new Date(obs.due_date).getTime() - now.getTime()) / (1000 * 3600 * 24));
-
-            if (daysUntilDue <= 3) {
-                actions.push({
-                    id: `pay-${obs.id}`,
-                    title: `Pagar ${obs.title}`,
-                    description: `Vence el ${new Date(obs.due_date).toLocaleDateString()}, monto $${obs.amount}`,
-                    type: 'payment',
-                    priority: 1,
-                    isCompleted: false
-                });
+        const upsertAction = (action: WeeklyAction) => {
+            const existingIndex = actions.findIndex((item) => item.id === action.id);
+            if (existingIndex >= 0) {
+                if (actions[existingIndex].priority > action.priority) {
+                    actions[existingIndex] = action;
+                }
+                return;
             }
+            actions.push(action);
+        };
+
+        openObligations.forEach((obligation) => {
+            const dueDate = new Date(obligation.due_date);
+            if (Number.isNaN(dueDate.getTime())) return;
+
+            const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+            if (daysUntilDue > 5) return;
+
+            const amount = toNumber(obligation.amount);
+            const isOverdue = obligation.status === 'overdue' || daysUntilDue < 0;
+            const urgencyLabel = isOverdue
+                ? `Vencida hace ${Math.abs(daysUntilDue)} día(s)`
+                : `Vence en ${daysUntilDue} día(s)`;
+
+            upsertAction({
+                id: `obligation-${obligation.id}`,
+                title: `Pagar ${obligation.title}`,
+                description: `${urgencyLabel} · $${amount.toFixed(0)}`,
+                type: 'payment',
+                priority: 1,
+                isCompleted: false,
+            });
+        });
+
+        activeDebts.forEach((debt) => {
+            const nextPaymentDate = new Date((debt as any).next_payment_date);
+            if (Number.isNaN(nextPaymentDate.getTime())) return;
+
+            const daysUntilDue = Math.ceil((nextPaymentDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+            if (daysUntilDue > 5) return;
+
+            const debtName = String((debt as any).name || 'Tu deuda');
+            if (normalizedObligationTitles.has(normalizeText(debtName))) return;
+
+            const monthlyPayment = toNumber((debt as any).monthly_payment);
+            const urgencyLabel = daysUntilDue < 0
+                ? `Pago vencido hace ${Math.abs(daysUntilDue)} día(s)`
+                : `Próximo pago en ${daysUntilDue} día(s)`;
+
+            upsertAction({
+                id: `debt-${(debt as any).id}`,
+                title: `Confirmar débito: ${debtName}`,
+                description: `${urgencyLabel} · cuota $${monthlyPayment.toFixed(0)}`,
+                type: 'payment',
+                priority: 1,
+                isCompleted: false,
+            });
         });
 
         if (profile === 'defensive') {
@@ -180,11 +245,18 @@ export function useCopilot() {
         // Sort by priority
         actions.sort((a, b) => a.priority - b.priority);
 
+        const priorityOneActions = actions.filter((action) => action.priority === 1);
+        const lowerPriorityActions = actions
+            .filter((action) => action.priority !== 1)
+            .sort((a, b) => a.priority - b.priority);
+
+        const weeklyActions = [...priorityOneActions, ...lowerPriorityActions].slice(0, 5);
+
         return {
             profile,
             riskLevel,
             capitalAvailable,
-            weeklyActions: actions.slice(0, 3), // Limit to top 3 actions
+            weeklyActions,
             monthlyOutlook: outlook
         };
     };

@@ -99,6 +99,7 @@ export function useFinance() {
             queryClient.invalidateQueries({ queryKey: ['debts'] });
             queryClient.invalidateQueries({ queryKey: ['transactions'] });
             queryClient.invalidateQueries({ queryKey: ['obligations'] });
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
 
             if (result?.obligationUpdated) {
                 toast.success('Pago confirmado y obligación marcada como pagada');

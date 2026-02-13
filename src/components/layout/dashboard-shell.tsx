@@ -218,16 +218,19 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 {children}
             </main>
 
-            <div className="fixed bottom-6 left-1/2 z-50 w-[90%] max-w-md -translate-x-1/2 md:hidden">
-                <nav className="glass grid grid-cols-5 items-center justify-items-center rounded-[2.5rem] border border-white/10 px-3 py-3 shadow-2xl">
+            <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 md:hidden">
+                <nav className="mx-auto grid h-20 w-full max-w-md grid-cols-5 items-center justify-items-center rounded-[2.2rem] border border-white/10 bg-background/90 px-3 shadow-2xl backdrop-blur-lg">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href;
 
                         if (item.id === 'action') {
                             return (
                                 <Link key={item.id} href={item.href}>
-                                    <div className="relative -top-8 flex h-16 w-16 items-center justify-center rounded-full border-4 border-background bg-emerald-600 text-white neon-glow transition-transform active:scale-90">
-                                        <item.icon className="h-8 w-8" />
+                                    <div className={cn(
+                                        'flex h-12 w-12 items-center justify-center rounded-full transition-transform active:scale-90',
+                                        isActive ? 'bg-emerald-600 text-white shadow-[0_0_20px_rgba(16,185,129,0.6)]' : 'bg-muted text-foreground'
+                                    )}>
+                                        <item.icon className="h-7 w-7" />
                                     </div>
                                 </Link>
                             );

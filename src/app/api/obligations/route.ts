@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { ObligationSchema } from '@/lib/schemas';
 import { recordAuditEvent } from '@/lib/audit';
-import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 
 export async function GET() {
     const context = createRequestContext('/api/obligations', 'GET');
@@ -16,6 +16,22 @@ export async function GET() {
 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const today = new Date().toISOString().split('T')[0];
+        const { error: overdueUpdateError } = await supabase
+            .from('obligations')
+            .update({ status: 'overdue' })
+            .eq('user_id', session.user.id)
+            .eq('status', 'pending')
+            .lt('due_date', today);
+
+        if (overdueUpdateError) {
+            logWarn('obligations_overdue_sync_failed', {
+                ...context,
+                userId: session.user.id,
+                reason: overdueUpdateError.message,
+            });
+        }
 
         const { data, error } = await supabase
             .from('obligations')

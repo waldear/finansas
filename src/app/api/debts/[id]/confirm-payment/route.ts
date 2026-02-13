@@ -3,6 +3,14 @@ import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
 
+type ObligationRecord = {
+    id: string;
+    title: string;
+    amount: string | number | null;
+    due_date: string | null;
+    status: 'pending' | 'overdue' | 'paid' | string;
+};
+
 function toIsoDate(value?: string | null) {
     if (typeof value !== 'string' || !value.trim()) {
         return new Date().toISOString().split('T')[0];
@@ -31,6 +39,67 @@ function addMonth(dateValue: string) {
     base.setUTCDate(Math.min(day, monthLastDay));
 
     return base.toISOString().split('T')[0];
+}
+
+function toNumericAmount(value: unknown) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeLabel(value: string) {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function dateDistanceInDays(a?: string | null, b?: string | null) {
+    if (!a || !b) return 30;
+    const first = new Date(`${a}T00:00:00.000Z`);
+    const second = new Date(`${b}T00:00:00.000Z`);
+
+    if (Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return 30;
+    return Math.abs(Math.round((first.getTime() - second.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function pickMatchingObligation(
+    obligations: ObligationRecord[],
+    debtName: string,
+    paymentAmount: number,
+    paymentDate: string
+) {
+    if (!obligations.length) return null;
+
+    const normalizedDebtName = normalizeLabel(debtName);
+    const exactTitleMatch = obligations.find((obligation) => normalizeLabel(obligation.title || '') === normalizedDebtName);
+    if (exactTitleMatch) return exactTitleMatch;
+
+    const amountTolerance = Math.max(paymentAmount * 0.35, 2500);
+    let bestMatch: ObligationRecord | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const obligation of obligations) {
+        const obligationAmount = toNumericAmount(obligation.amount);
+        const amountDelta = Math.abs(obligationAmount - paymentAmount);
+        const normalizedTitle = normalizeLabel(obligation.title || '');
+        const titleRelated =
+            normalizedDebtName.length > 0 &&
+            (normalizedTitle.includes(normalizedDebtName) || normalizedDebtName.includes(normalizedTitle));
+
+        if (!titleRelated && amountDelta > amountTolerance) continue;
+
+        const dueDateDelta = dateDistanceInDays(obligation.due_date, paymentDate);
+        const score = amountDelta + dueDateDelta * 12 + (titleRelated ? -1000 : 0);
+
+        if (score < bestScore) {
+            bestScore = score;
+            bestMatch = obligation;
+        }
+    }
+
+    return bestMatch;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -137,25 +206,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
 
         let matchedObligationId: string | null = null;
-        const { data: pendingObligation } = await supabase
+        const { data: openObligations } = await supabase
             .from('obligations')
-            .select('id, status')
+            .select('id, title, amount, due_date, status')
             .eq('user_id', session.user.id)
-            .eq('status', 'pending')
-            .eq('title', debt.name)
+            .in('status', ['pending', 'overdue'])
             .order('due_date', { ascending: true })
-            .limit(1)
-            .maybeSingle();
+            .limit(30);
 
-        if (pendingObligation?.id) {
+        const matchedObligation = pickMatchingObligation(
+            (openObligations || []) as ObligationRecord[],
+            String(debt.name || ''),
+            paymentAmount,
+            paymentDate
+        );
+
+        if (matchedObligation?.id) {
             const { error: obligationUpdateError } = await supabase
                 .from('obligations')
                 .update({ status: 'paid' })
-                .eq('id', pendingObligation.id)
+                .eq('id', matchedObligation.id)
                 .eq('user_id', session.user.id);
 
             if (!obligationUpdateError) {
-                matchedObligationId = pendingObligation.id;
+                matchedObligationId = matchedObligation.id;
             }
         }
 

@@ -14,14 +14,35 @@ export async function GET(req: Request) {
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const url = new URL(req.url);
-        const limit = Math.min(Number(url.searchParams.get('limit') || 50), 200);
+        const limit = Math.min(Number(url.searchParams.get('limit') || 200), 2000);
+        const from = url.searchParams.get('from');
+        const to = url.searchParams.get('to');
+        const entityType = url.searchParams.get('entity_type');
+        const action = url.searchParams.get('action');
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('audit_events')
             .select('*')
             .eq('user_id', session.user.id)
-            .order('created_at', { ascending: false })
-            .limit(limit);
+            .order('created_at', { ascending: false });
+
+        if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+            query = query.gte('created_at', `${from}T00:00:00.000Z`);
+        }
+
+        if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+            query = query.lte('created_at', `${to}T23:59:59.999Z`);
+        }
+
+        if (entityType) {
+            query = query.eq('entity_type', entityType);
+        }
+
+        if (action) {
+            query = query.eq('action', action);
+        }
+
+        const { data, error } = await query.limit(limit);
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -1,9 +1,10 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
 import { useTransactions } from '@/hooks/use-transactions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, TrendingUp, TrendingDown, PieChart as PieIcon, BarChart3 } from 'lucide-react';
+import { Loader2, PieChart as PieIcon, BarChart3 } from 'lucide-react';
 import {
     BarChart,
     Bar,
@@ -20,6 +21,14 @@ import {
 
 export default function ChartsPage() {
     const { transactions, isLoading } = useTransactions();
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const updateViewport = () => setIsMobile(window.innerWidth < 768);
+        updateViewport();
+        window.addEventListener('resize', updateViewport);
+        return () => window.removeEventListener('resize', updateViewport);
+    }, []);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -64,6 +73,7 @@ export default function ChartsPage() {
 
     const pieData = Object.entries(categoryData).map(([name, value]) => ({ name, value }));
     const barData = Object.values(monthlyData).reverse().slice(-6); // Last 6 months
+    const visibleBarData = isMobile ? barData.slice(-4) : barData;
 
     const CHART_CONFIG = [
         { hex: '#3b82f6', className: 'bg-blue-500' },
@@ -83,7 +93,7 @@ export default function ChartsPage() {
 
             <div className="grid gap-6 md:grid-cols-2">
                 {/* Evolution Chart */}
-                <Card className="col-span-2">
+                <Card className="md:col-span-2">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="text-xl font-bold flex items-center gap-2">
                             <BarChart3 className="w-5 h-5 text-primary" />
@@ -91,19 +101,23 @@ export default function ChartsPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[350px] w-full">
+                        <div className="h-[320px] w-full min-w-0 overflow-hidden sm:h-[350px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={barData}>
+                                <BarChart
+                                    data={visibleBarData}
+                                    margin={{ top: 8, right: 4, left: isMobile ? -20 : 0, bottom: 0 }}
+                                    barGap={isMobile ? 4 : 8}
+                                >
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                                    <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
+                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: isMobile ? 10 : 12 }} />
+                                    <YAxis axisLine={false} tickLine={false} width={isMobile ? 44 : 60} tickFormatter={(value) => `$${value / 1000}k`} tick={{ fontSize: isMobile ? 10 : 12 }} />
                                     <Tooltip
                                         formatter={(value: any) => formatCurrency(Number(value))}
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                     />
-                                    <Legend />
-                                    <Bar dataKey="income" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="expense" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                                    {!isMobile && <Legend />}
+                                    <Bar dataKey="income" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={isMobile ? 18 : 28} />
+                                    <Bar dataKey="expense" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={isMobile ? 18 : 28} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -119,16 +133,16 @@ export default function ChartsPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[280px] w-full min-w-0 overflow-hidden sm:h-[300px]">
                             {pieData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
                                             data={pieData}
                                             cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
+                                            cy={isMobile ? '46%' : '50%'}
+                                            innerRadius={isMobile ? 40 : 60}
+                                            outerRadius={isMobile ? 58 : 80}
                                             paddingAngle={5}
                                             dataKey="value"
                                         >
@@ -137,7 +151,7 @@ export default function ChartsPage() {
                                             ))}
                                         </Pie>
                                         <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                                        <Legend />
+                                        {!isMobile && <Legend />}
                                     </PieChart>
                                 </ResponsiveContainer>
                             ) : (
