@@ -1,4 +1,4 @@
-import { keepPreviousData, useQueries } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 
 export function useDashboard() {
     const results = useQueries({
@@ -6,32 +6,32 @@ export function useDashboard() {
             {
                 queryKey: ['debts'],
                 queryFn: async () => {
-                    const res = await fetch('/api/debts', { credentials: 'include' });
+                    const res = await fetch('/api/debts', { credentials: 'include', cache: 'no-store' });
                     if (!res.ok) throw new Error('Error al cargar deudas');
                     return res.json();
                 },
                 staleTime: 5 * 60 * 1000, // 5 minutes
-                placeholderData: keepPreviousData,
+                refetchOnMount: 'always',
             },
             {
                 queryKey: ['savings'],
                 queryFn: async () => {
-                    const res = await fetch('/api/savings', { credentials: 'include' });
+                    const res = await fetch('/api/savings', { credentials: 'include', cache: 'no-store' });
                     if (!res.ok) throw new Error('Error al cargar metas');
                     return res.json();
                 },
                 staleTime: 5 * 60 * 1000,
-                placeholderData: keepPreviousData,
+                refetchOnMount: 'always',
             },
             {
                 queryKey: ['transactions'],
                 queryFn: async () => {
-                    const res = await fetch('/api/transactions', { credentials: 'include' });
+                    const res = await fetch('/api/transactions', { credentials: 'include', cache: 'no-store' });
                     if (!res.ok) throw new Error('Error al cargar transacciones');
                     return res.json();
                 },
                 staleTime: 2 * 60 * 1000, // 2 minutes (transactions change more often)
-                placeholderData: keepPreviousData,
+                refetchOnMount: 'always',
             },
         ],
     });

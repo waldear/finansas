@@ -13,12 +13,13 @@ export function useTransactions() {
     const transactionsQuery = useQuery({
         queryKey: ['transactions'],
         queryFn: async () => {
-            const res = await fetch('/api/transactions', { credentials: 'include' });
+            const res = await fetch('/api/transactions', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.error || 'Error al cargar transacciones');
             return (body || []) as Transaction[];
         },
         staleTime: 5 * 60 * 1000,
+        refetchOnMount: 'always',
     });
 
     const addTransaction = useMutation({

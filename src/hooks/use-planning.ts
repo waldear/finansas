@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
     Budget,
@@ -30,7 +30,7 @@ export function usePlanning(month = currentMonth()) {
     const budgetsQuery = useQuery({
         queryKey: ['budgets', month],
         queryFn: async () => {
-            const response = await fetch(`/api/budgets?month=${month}`, { credentials: 'include' });
+            const response = await fetch(`/api/budgets?month=${month}`, { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
             if (!response.ok) throw new Error(body?.error || 'Error al cargar presupuestos');
             return (body || []) as Array<Budget & {
@@ -41,19 +41,19 @@ export function usePlanning(month = currentMonth()) {
             }>;
         },
         staleTime: 2 * 60 * 1000,
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     const recurringQuery = useQuery({
         queryKey: ['recurring'],
         queryFn: async () => {
-            const response = await fetch('/api/recurring', { credentials: 'include' });
+            const response = await fetch('/api/recurring', { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
             if (!response.ok) throw new Error(body?.error || 'Error al cargar recurrencias');
             return (body || []) as RecurringTransaction[];
         },
         staleTime: 2 * 60 * 1000,
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     const addBudget = useMutation({

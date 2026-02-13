@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 export interface AuditEvent {
     id: string;
@@ -13,13 +13,13 @@ export function useAudit(limit = 50) {
     const query = useQuery({
         queryKey: ['audit', limit],
         queryFn: async () => {
-            const response = await fetch(`/api/audit?limit=${limit}`, { credentials: 'include' });
+            const response = await fetch(`/api/audit?limit=${limit}`, { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
             if (!response.ok) throw new Error(body?.error || 'Error al cargar auditoría');
             return (body || []) as AuditEvent[];
         },
         staleTime: 60 * 1000,
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     return {

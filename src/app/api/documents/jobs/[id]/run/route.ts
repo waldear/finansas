@@ -5,7 +5,7 @@ import { extractFinancialDocument, VALID_DOCUMENT_TYPES } from '@/lib/document-p
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
 
-async function addNextAttempt(supabase: any, jobId: string, attempts: number) {
+async function addNextAttempt(supabase: any, jobId: string, userId: string, attempts: number) {
     await supabase
         .from('document_jobs')
         .update({
@@ -14,7 +14,8 @@ async function addNextAttempt(supabase: any, jobId: string, attempts: number) {
             error_message: null,
             updated_at: new Date().toISOString(),
         })
-        .eq('id', jobId);
+        .eq('id', jobId)
+        .eq('user_id', userId);
 }
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,7 +67,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             });
         }
 
-        await addNextAttempt(supabase, job.id, job.attempts || 0);
+        await addNextAttempt(supabase, job.id, user.id, job.attempts || 0);
 
         const { data: fileData, error: downloadError } = await supabase.storage
             .from('documents')
@@ -80,7 +81,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
                     error_message: downloadError?.message || 'No se pudo descargar el archivo',
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', job.id);
+                .eq('id', job.id)
+                .eq('user_id', user.id);
 
             return NextResponse.json(
                 { error: 'No se pudo descargar el documento del storage.' },
@@ -116,7 +118,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
                     error_message: docError.message,
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', job.id);
+                .eq('id', job.id)
+                .eq('user_id', user.id);
 
             return NextResponse.json(
                 {
@@ -146,7 +149,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
                     error_message: extractionError.message,
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', job.id);
+                .eq('id', job.id)
+                .eq('user_id', user.id);
 
             return NextResponse.json(
                 {
@@ -166,7 +170,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
                 error_message: null,
                 updated_at: new Date().toISOString(),
             })
-            .eq('id', job.id);
+            .eq('id', job.id)
+            .eq('user_id', user.id);
 
         await recordAuditEvent({
             supabase,

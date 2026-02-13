@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Debt, DebtInput, DebtUpdate, SavingsGoal, SavingsGoalInput, SavingsGoalUpdate } from '@/lib/schemas';
 import { toast } from 'sonner';
 
@@ -25,25 +25,25 @@ export function useFinance() {
     const debtsQuery = useQuery({
         queryKey: ['debts'],
         queryFn: async () => {
-            const res = await fetch('/api/debts', { credentials: 'include' });
+            const res = await fetch('/api/debts', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.error || 'Error al cargar deudas');
             return (body || []) as Debt[];
         },
         staleTime: 5 * 60 * 1000,
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     const goalsQuery = useQuery({
         queryKey: ['savings'],
         queryFn: async () => {
-            const res = await fetch('/api/savings', { credentials: 'include' });
+            const res = await fetch('/api/savings', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.error || 'Error al cargar metas');
             return (body || []) as SavingsGoal[];
         },
         staleTime: 5 * 60 * 1000,
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     const addDebt = useMutation({

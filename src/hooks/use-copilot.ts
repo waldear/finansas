@@ -1,5 +1,5 @@
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useFinance } from './use-finance';
 import { useTransactions } from './use-transactions';
 
@@ -54,14 +54,14 @@ export function useCopilot() {
     const { data: obligations, isLoading: isLoadingObligations } = useQuery<Obligation[]>({
         queryKey: ['obligations'],
         queryFn: async () => {
-            const res = await fetch('/api/obligations', { credentials: 'include' });
+            const res = await fetch('/api/obligations', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
             if (!res.ok) throw new Error(body?.error || 'Error al cargar obligaciones');
             const data = (body || []) as Obligation[];
             return data.filter((obligation) => obligation.status !== 'paid');
         },
         staleTime: 5 * 60 * 1000, // 5 minutes cache
-        placeholderData: keepPreviousData,
+        refetchOnMount: 'always',
     });
 
     const calculateFinancialProfile = (): CopilotInsight => {
