@@ -1,13 +1,13 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Brain, FileImage, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
+import { Brain, Crown, FileImage, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
 
@@ -70,6 +70,34 @@ export default function AssistantPage() {
     const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
     const [billing, setBilling] = useState<AssistantBilling | null>(null);
+    const [isStartingCheckout, setIsStartingCheckout] = useState(false);
+    const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+
+    const loadBilling = useCallback(async () => {
+        try {
+            const response = await fetch('/api/billing/entitlement', {
+                credentials: 'include',
+                cache: 'no-store',
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || !payload) return;
+            setBilling({
+                plan: payload.plan === 'pro' ? 'pro' : 'free',
+                status: String(payload.status || 'active'),
+                provider: String(payload.provider || 'none'),
+                requiresUpgrade: Boolean(payload.plan !== 'pro' && payload.usage?.remainingRequests === 0),
+                usage: {
+                    usedRequests: Number(payload.usage?.usedRequests || 0),
+                    limitRequests: Number(payload.usage?.limitRequests || 0),
+                    remainingRequests: Number(payload.usage?.remainingRequests || 0),
+                    periodStart: String(payload.usage?.periodStart || ''),
+                    periodEnd: String(payload.usage?.periodEnd || ''),
+                },
+            });
+        } catch {
+            // no-op
+        }
+    }, []);
 
     useEffect(() => {
         const loadHistory = async () => {
@@ -103,34 +131,84 @@ export default function AssistantPage() {
     }, []);
 
     useEffect(() => {
-        const loadBilling = async () => {
-            try {
-                const response = await fetch('/api/billing/entitlement', {
-                    credentials: 'include',
-                    cache: 'no-store',
-                });
-                const payload = await response.json().catch(() => null);
-                if (!response.ok || !payload) return;
-                setBilling({
-                    plan: payload.plan === 'pro' ? 'pro' : 'free',
-                    status: String(payload.status || 'active'),
-                    provider: String(payload.provider || 'none'),
-                    requiresUpgrade: Boolean(payload.plan !== 'pro' && payload.usage?.remainingRequests === 0),
-                    usage: {
-                        usedRequests: Number(payload.usage?.usedRequests || 0),
-                        limitRequests: Number(payload.usage?.limitRequests || 0),
-                        remainingRequests: Number(payload.usage?.remainingRequests || 0),
-                        periodStart: String(payload.usage?.periodStart || ''),
-                        periodEnd: String(payload.usage?.periodEnd || ''),
-                    },
-                });
-            } catch {
-                // no-op
-            }
-        };
+        void loadBilling();
+    }, [loadBilling]);
 
-        loadBilling();
-    }, []);
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const billingState = params.get('billing');
+        if (!billingState) return;
+
+        if (billingState === 'success') {
+            toast.success('Suscripción Pro activada. Actualizando estado...');
+            void loadBilling();
+        } else if (billingState === 'cancelled') {
+            toast.info('Checkout cancelado.');
+        } else if (billingState === 'portal') {
+            toast.success('Estado de suscripción actualizado.');
+            void loadBilling();
+        }
+
+        params.delete('billing');
+        const nextQuery = params.toString();
+        const nextUrl = nextQuery ? `/dashboard/assistant?${nextQuery}` : '/dashboard/assistant';
+        window.history.replaceState({}, '', nextUrl);
+    }, [loadBilling]);
+
+    const handleStartCheckout = async () => {
+        setIsStartingCheckout(true);
+        try {
+            const response = await fetch('/api/billing/checkout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                if (response.status === 409) {
+                    toast.info(payload?.error || 'Tu suscripción Pro ya está activa.');
+                    await loadBilling();
+                    return;
+                }
+                throw new Error(payload?.error || 'No se pudo iniciar el checkout.');
+            }
+
+            if (!payload?.url) {
+                throw new Error('Stripe no devolvió URL de checkout.');
+            }
+
+            window.location.assign(payload.url);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo iniciar el checkout.');
+        } finally {
+            setIsStartingCheckout(false);
+        }
+    };
+
+    const handleOpenPortal = async () => {
+        setIsOpeningPortal(true);
+        try {
+            const response = await fetch('/api/billing/portal', {
+                method: 'POST',
+                credentials: 'include',
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo abrir el portal de suscripción.');
+            }
+
+            if (!payload?.url) {
+                throw new Error('Stripe no devolvió URL del portal.');
+            }
+
+            window.location.assign(payload.url);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo abrir el portal de suscripción.');
+        } finally {
+            setIsOpeningPortal(false);
+        }
+    };
 
     const processAttachedDocument = async (file: File): Promise<AssistantDocumentContext> => {
         const formData = new FormData();
@@ -302,6 +380,39 @@ export default function AssistantPage() {
                             </span>
                         )}
                     </CardTitle>
+                    <div className="flex flex-wrap gap-2">
+                        {(billing?.plan !== 'pro') && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                className="h-8"
+                                onClick={handleStartCheckout}
+                                disabled={isStartingCheckout || isOpeningPortal}
+                            >
+                                {isStartingCheckout ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Crown className="mr-2 h-4 w-4" />
+                                )}
+                                Pasar a Pro
+                            </Button>
+                        )}
+                        {(billing?.provider === 'stripe' || billing?.plan === 'pro') && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={handleOpenPortal}
+                                disabled={isOpeningPortal || isStartingCheckout}
+                            >
+                                {isOpeningPortal ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : null}
+                                Gestionar suscripción
+                            </Button>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden p-0">
                     <ScrollArea className="h-full p-4">
@@ -383,6 +494,7 @@ export default function AssistantPage() {
                                     className="h-6 w-6"
                                     onClick={() => setAttachedFile(null)}
                                     disabled={isLoading || isProcessingAttachment}
+                                    title="Quitar archivo adjunto"
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </Button>
@@ -396,6 +508,7 @@ export default function AssistantPage() {
                                 accept=".pdf,.jpg,.jpeg,.png,.webp"
                                 onChange={handleAttachmentSelection}
                                 className="hidden"
+                                title="Seleccionar archivo"
                             />
                             <Button
                                 type="button"
@@ -415,7 +528,7 @@ export default function AssistantPage() {
                                 disabled={isLoading || isProcessingAttachment}
                                 className="h-11 min-w-0 flex-1 basis-[12rem]"
                             />
-                            <Button type="submit" size="icon" disabled={isLoading || isProcessingAttachment} className="h-11 w-11">
+                            <Button type="submit" size="icon" disabled={isLoading || isProcessingAttachment} className="h-11 w-11" title="Enviar mensaje">
                                 {(isLoading || isProcessingAttachment) ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (

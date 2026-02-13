@@ -17,6 +17,9 @@ export async function GET() {
         const hasSentry = !!(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);
         const hasServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
         const hasBillingWebhookSecret = !!process.env.BILLING_WEBHOOK_SECRET;
+        const hasStripeSecretKey = !!process.env.STRIPE_SECRET_KEY;
+        const hasStripeProPrice = !!process.env.STRIPE_PRO_PRICE_ID;
+        const hasStripeWebhookSecret = !!process.env.STRIPE_WEBHOOK_SECRET;
 
         // Check tables - using HEAD request to check existence
         const obligations = await supabase.from('obligations').select('*', { count: 'exact', head: true }).limit(1);
@@ -43,6 +46,9 @@ export async function GET() {
                 SENTRY_DSN: hasSentry,
                 SUPABASE_SERVICE_ROLE_KEY: hasServiceRole,
                 BILLING_WEBHOOK_SECRET: hasBillingWebhookSecret,
+                STRIPE_SECRET_KEY: hasStripeSecretKey,
+                STRIPE_PRO_PRICE_ID: hasStripeProPrice,
+                STRIPE_WEBHOOK_SECRET: hasStripeWebhookSecret,
             },
             db: {
                 obligations_table: !obligations.error,
