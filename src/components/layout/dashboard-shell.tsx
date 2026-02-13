@@ -13,9 +13,9 @@ import {
     Moon,
     PiggyBank,
     Settings,
-    Sparkles,
     Sun,
     UserCircle2,
+    Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase-browser';
@@ -66,7 +66,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         applyTheme(storedTheme);
     }, []);
 
-    const firstName = useMemo(() => {
+    const userNick = useMemo(() => {
+        const email = typeof user?.email === 'string' ? user.email : '';
+        const nickFromEmail = email.split('@')[0]?.split('+')[0]?.trim();
+
+        if (nickFromEmail) {
+            return nickFromEmail;
+        }
+
         return user?.user_metadata?.full_name?.split(' ')[0] || 'Usuario';
     }, [user]);
 
@@ -166,7 +173,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
                         <div>
                             <p className="text-xs font-medium text-muted-foreground">Hola de nuevo,</p>
-                            <h2 className="text-lg font-bold tracking-tight">{firstName}</h2>
+                            <h2 className="text-lg font-bold tracking-tight">{userNick}</h2>
                         </div>
                     </div>
 
@@ -178,7 +185,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
             <aside className="fixed bottom-0 left-0 top-0 z-50 hidden w-20 flex-col items-center border-r bg-card py-8 md:flex">
                 <div className="mb-10 text-primary">
-                    <Sparkles className="h-8 w-8" />
+                    <Wallet className="h-8 w-8" />
                 </div>
                 <nav className="flex flex-1 flex-col gap-6">
                     {navItems.map((item) => (
