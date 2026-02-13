@@ -1,25 +1,62 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Brain, Send, Loader2 } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
+import { toast } from 'sonner';
 
 const quickPrompts = [
     'Dame recordatorios de vencimientos de esta semana',
     '¿Qué pagos debería priorizar hoy?',
     'Analiza mis gastos y sugiere 3 ajustes',
     '¿Cómo voy frente a mis presupuestos?',
+    '/gasto 24500 supermercado',
+    '/ingreso 320000 salario',
 ];
 
 export default function AssistantPage() {
+    const queryClient = useQueryClient();
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+    useEffect(() => {
+        const loadHistory = async () => {
+            try {
+                setIsLoadingHistory(true);
+                const response = await fetch('/api/assistant/history', { credentials: 'include' });
+                const payload = await response.json().catch(() => null);
+
+                if (!response.ok) {
+                    return;
+                }
+
+                if (Array.isArray(payload)) {
+                    const hydratedMessages: { role: 'user' | 'assistant'; content: string }[] = payload
+                        .map((item: any) => ({
+                            role: item?.role === 'assistant' ? 'assistant' as const : 'user' as const,
+                            content: typeof item?.content === 'string' ? item.content : '',
+                        }))
+                        .filter((item) => item.content);
+
+                    setMessages(hydratedMessages);
+                }
+            } catch {
+                // no-op: fail soft
+            } finally {
+                setIsLoadingHistory(false);
+            }
+        };
+
+        loadHistory();
+    }, []);
 
     const handleSend = async (forcedMessage?: string) => {
         const userMessage = (forcedMessage ?? input).trim();
@@ -45,6 +82,16 @@ export default function AssistantPage() {
             }
 
             setMessages(prev => [...prev, { role: 'assistant', content: data.text }]);
+
+            if (Array.isArray(data?.actionsApplied) && data.actionsApplied.length > 0) {
+                await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+                    queryClient.invalidateQueries({ queryKey: ['debts'] }),
+                    queryClient.invalidateQueries({ queryKey: ['obligations'] }),
+                    queryClient.invalidateQueries({ queryKey: ['savings'] }),
+                ]);
+                toast.success(`Se registraron ${data.actionsApplied.length} cambios automáticamente.`);
+            }
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu solicitud.' }]);
         } finally {
@@ -72,6 +119,7 @@ export default function AssistantPage() {
                                         <p className="text-sm text-muted-foreground px-4">
                                             Tengo contexto de transacciones, deudas, obligaciones, metas, presupuestos y recurrencias.
                                             Pídeme recordatorios, prioridades de pago y sugerencias concretas.
+                                            También puedes registrar rápido con `/gasto`, `/ingreso` o `/deuda`.
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center justify-center gap-2 px-4">
@@ -89,6 +137,11 @@ export default function AssistantPage() {
                                             </Button>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                            {isLoadingHistory && (
+                                <div className="flex justify-center py-2 text-xs text-muted-foreground">
+                                    Cargando historial...
                                 </div>
                             )}
                             {messages.map((m, i) => (
