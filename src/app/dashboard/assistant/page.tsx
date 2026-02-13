@@ -1,15 +1,41 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Brain, Send, Loader2 } from 'lucide-react';
+import { Brain, FileImage, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
+
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_ATTACHMENT_TYPES = new Set([
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+]);
+
+type AssistantDocumentContext = {
+    sourceName: string;
+    mimeType: string;
+    sizeBytes: number;
+    extraction: any;
+};
+
+function formatFileSize(bytes: number) {
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+    if (bytes >= 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${bytes} B`;
+}
 
 const quickPrompts = [
     'Dame recordatorios de vencimientos de esta semana',
@@ -22,9 +48,12 @@ const quickPrompts = [
 
 export default function AssistantPage() {
     const queryClient = useQueryClient();
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [input, setInput] = useState('');
+    const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
     useEffect(() => {
@@ -58,21 +87,127 @@ export default function AssistantPage() {
         loadHistory();
     }, []);
 
+    const processAttachedDocument = async (file: File): Promise<AssistantDocumentContext> => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const enqueueResponse = await fetch('/api/documents/process', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData,
+        });
+
+        const enqueueBody = await enqueueResponse.json().catch(() => null);
+        if (!enqueueResponse.ok) {
+            const composedError = [enqueueBody?.error, enqueueBody?.details, enqueueBody?.hint]
+                .filter(Boolean)
+                .join(' · ');
+            throw new Error(composedError || 'No se pudo procesar el archivo adjunto.');
+        }
+
+        if (enqueueBody?.warning) {
+            toast.warning(enqueueBody.warning);
+        }
+
+        if (!enqueueBody?.jobId) {
+            if (!enqueueBody?.data) {
+                throw new Error('No se obtuvo extracción del archivo adjunto.');
+            }
+            return {
+                sourceName: file.name,
+                mimeType: file.type,
+                sizeBytes: file.size,
+                extraction: enqueueBody.data,
+            };
+        }
+
+        await fetch(`/api/documents/jobs/${enqueueBody.jobId}/run`, {
+            method: 'POST',
+            credentials: 'include',
+        });
+
+        for (let attempt = 0; attempt < 45; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            const statusResponse = await fetch(`/api/documents/jobs/${enqueueBody.jobId}`, {
+                credentials: 'include',
+            });
+            const statusBody = await statusResponse.json().catch(() => null);
+
+            if (!statusResponse.ok) {
+                throw new Error(statusBody?.error || 'No se pudo consultar el estado del documento.');
+            }
+
+            if (statusBody?.status === 'completed') {
+                if (statusBody?.warning) {
+                    toast.warning(statusBody.warning);
+                }
+                return {
+                    sourceName: file.name,
+                    mimeType: file.type,
+                    sizeBytes: file.size,
+                    extraction: statusBody?.data,
+                };
+            }
+
+            if (statusBody?.status === 'failed') {
+                throw new Error(statusBody?.error || 'El análisis del adjunto falló.');
+            }
+        }
+
+        throw new Error('El análisis del adjunto tardó demasiado. Inténtalo nuevamente.');
+    };
+
+    const handleAttachmentSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!SUPPORTED_ATTACHMENT_TYPES.has(file.type)) {
+            toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
+            event.target.value = '';
+            return;
+        }
+
+        if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+            toast.error('El archivo supera 10MB. Sube uno más liviano.');
+            event.target.value = '';
+            return;
+        }
+
+        setAttachedFile(file);
+        event.target.value = '';
+    };
+
     const handleSend = async (forcedMessage?: string) => {
         const userMessage = (forcedMessage ?? input).trim();
-        if (!userMessage) return;
+        const fileToAnalyze = attachedFile;
+        if (!userMessage && !fileToAnalyze) return;
 
         setInput('');
-        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        setAttachedFile(null);
+        setMessages((prev) => [
+            ...prev,
+            {
+                role: 'user',
+                content: userMessage || `Adjunté ${fileToAnalyze?.name}. Analízalo y recomiéndame acciones.`,
+            },
+        ]);
         setIsLoading(true);
 
         try {
+            let documentContext: AssistantDocumentContext | undefined;
+            if (fileToAnalyze) {
+                setIsProcessingAttachment(true);
+                documentContext = await processAttachedDocument(fileToAnalyze);
+                toast.success('Adjunto procesado. Generando recomendaciones...');
+            }
+
             const res = await fetch('/api/assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
-                    message: userMessage,
+                    message: userMessage || `Analiza este documento (${fileToAnalyze?.name}) y dame conclusiones.`,
+                    documentContext,
                 }),
             });
 
@@ -94,7 +229,12 @@ export default function AssistantPage() {
             }
         } catch (error) {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu solicitud.' }]);
+            if (fileToAnalyze) {
+                setAttachedFile(fileToAnalyze);
+            }
+            toast.error(error instanceof Error ? error.message : 'No se pudo procesar el adjunto.');
         } finally {
+            setIsProcessingAttachment(false);
             setIsLoading(false);
         }
     };
@@ -168,18 +308,66 @@ export default function AssistantPage() {
                 <div className="p-4 border-t bg-background">
                     <form
                         onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-                        className="flex gap-2"
+                        className="space-y-3"
                     >
-                        <Input
-                            placeholder="Pregúntame sobre tus gastos, deudas o consejos de ahorro..."
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            disabled={isLoading}
-                            className="flex-1 h-11"
-                        />
-                        <Button type="submit" size="icon" disabled={isLoading} className="h-11 w-11">
-                            <Send className="h-4 w-4" />
-                        </Button>
+                        {attachedFile && (
+                            <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                                <div className="flex items-center gap-2 truncate">
+                                    {attachedFile.type.startsWith('image/') ? (
+                                        <FileImage className="h-4 w-4 shrink-0 text-primary" />
+                                    ) : (
+                                        <FileText className="h-4 w-4 shrink-0 text-primary" />
+                                    )}
+                                    <span className="truncate">{attachedFile.name}</span>
+                                    <span className="text-muted-foreground">({formatFileSize(attachedFile.size)})</span>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => setAttachedFile(null)}
+                                    disabled={isLoading || isProcessingAttachment}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                onChange={handleAttachmentSelection}
+                                className="hidden"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-11 w-11 shrink-0"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isLoading || isProcessingAttachment}
+                                title="Adjuntar resumen o imagen"
+                            >
+                                <Paperclip className="h-4 w-4" />
+                            </Button>
+                            <Input
+                                placeholder="Pregúntame sobre tus gastos, deudas o consejos de ahorro..."
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                disabled={isLoading || isProcessingAttachment}
+                                className="flex-1 h-11"
+                            />
+                            <Button type="submit" size="icon" disabled={isLoading || isProcessingAttachment} className="h-11 w-11">
+                                {(isLoading || isProcessingAttachment) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Send className="h-4 w-4" />
+                                )}
+                            </Button>
+                        </div>
                     </form>
                 </div>
             </Card>

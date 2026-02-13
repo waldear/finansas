@@ -8,6 +8,12 @@ import { recordAuditEvent } from '@/lib/audit';
 
 type AssistantRequestPayload = {
     message?: string;
+    documentContext?: {
+        sourceName?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+        extraction?: unknown;
+    };
 };
 
 type TransactionRow = {
@@ -47,6 +53,35 @@ type AppliedAction = {
     id: string;
     summary: string;
 };
+
+type AssistantDocumentContext = {
+    sourceName: string;
+    mimeType: string;
+    sizeBytes: number;
+    extraction: unknown;
+};
+
+function sanitizeDocumentContext(raw: AssistantRequestPayload['documentContext']): AssistantDocumentContext | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const sourceName = typeof raw.sourceName === 'string' && raw.sourceName.trim()
+        ? raw.sourceName.trim().slice(0, 180)
+        : 'adjunto';
+
+    const mimeType = typeof raw.mimeType === 'string' && raw.mimeType.trim()
+        ? raw.mimeType.trim().slice(0, 120)
+        : 'application/octet-stream';
+
+    const sizeBytes = Number.isFinite(Number(raw.sizeBytes)) ? Number(raw.sizeBytes) : 0;
+    const extraction = raw.extraction ?? null;
+
+    return {
+        sourceName,
+        mimeType,
+        sizeBytes,
+        extraction,
+    };
+}
 
 function normalizeText(value: string) {
     return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -247,8 +282,9 @@ async function persistChatEvent(params: {
     role: 'user' | 'assistant';
     content: string;
     actionsApplied?: AppliedAction[];
+    documentContext?: AssistantDocumentContext | null;
 }) {
-    const { supabase, userId, role, content, actionsApplied = [] } = params;
+    const { supabase, userId, role, content, actionsApplied = [], documentContext = null } = params;
     try {
         const { error } = await supabase.from('audit_events').insert({
             user_id: userId,
@@ -259,6 +295,7 @@ async function persistChatEvent(params: {
                 role,
                 content,
                 actions_applied: actionsApplied,
+                document_context: documentContext,
             },
         });
 
@@ -392,6 +429,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Mensaje requerido' }, { status: 400 });
         }
 
+        const documentContext = sanitizeDocumentContext(body.documentContext);
+
         const geminiApiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
         if (!geminiApiKey) {
             return NextResponse.json({
@@ -400,18 +439,20 @@ export async function POST(req: Request) {
         }
 
         let actionsApplied: AppliedAction[] = [];
-        try {
-            actionsApplied = await applyQuickAction({
-                supabase,
-                userId: user.id,
-                message,
-            });
-        } catch (error) {
-            logWarn('assistant_quick_action_failed', {
-                ...logContext,
-                userId: user.id,
-                reason: error instanceof Error ? error.message : String(error),
-            });
+        if (!documentContext) {
+            try {
+                actionsApplied = await applyQuickAction({
+                    supabase,
+                    userId: user.id,
+                    message,
+                });
+            } catch (error) {
+                logWarn('assistant_quick_action_failed', {
+                    ...logContext,
+                    userId: user.id,
+                    reason: error instanceof Error ? error.message : String(error),
+                });
+            }
         }
 
         await persistChatEvent({
@@ -420,6 +461,7 @@ export async function POST(req: Request) {
             role: 'user',
             content: message,
             actionsApplied,
+            documentContext,
         });
 
         const month = currentMonthKey();
@@ -570,6 +612,7 @@ export async function POST(req: Request) {
             recentTransactions: transactions.slice(0, 40),
             reminders: reminders.slice(0, 12),
             actionsApplied,
+            attachedDocument: documentContext,
         };
 
         const systemPrompt = `
@@ -585,6 +628,7 @@ Tu respuesta debe incluir:
 4) Siguiente mejor acción (1 acción concreta para hoy)
 
 Si "actionsApplied" viene con elementos, confirma claramente qué se registró automáticamente.
+Si "attachedDocument" existe, inclúyelo en tu análisis como fuente principal de contexto documental.
 
 Prioriza:
 - vencimientos próximos o vencidos
@@ -614,6 +658,7 @@ ${message}
             role: 'assistant',
             content: text,
             actionsApplied,
+            documentContext,
         });
 
         logInfo('assistant_response_generated', {
