@@ -1,13 +1,16 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
+import { useState } from 'react';
 import { useFinance } from '@/hooks/use-finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DebtForm } from '@/components/finance/debt-form';
-import { Loader2, CreditCard, Calendar, ArrowRight } from 'lucide-react';
+import { Loader2, CreditCard, Calendar, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function DebtsPage() {
-    const { debts, isLoadingDebts, debtsError } = useFinance();
+    const [processingDebtId, setProcessingDebtId] = useState<string | null>(null);
+    const { debts, isLoadingDebts, debtsError, confirmDebtPayment, isConfirmingDebtPayment } = useFinance();
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-AR', {
@@ -15,6 +18,15 @@ export default function DebtsPage() {
             currency: 'ARS',
             minimumFractionDigits: 0,
         }).format(amount);
+    };
+
+    const handleConfirmPayment = async (debtId: string) => {
+        setProcessingDebtId(debtId);
+        try {
+            await confirmDebtPayment({ debtId });
+        } finally {
+            setProcessingDebtId(null);
+        }
     };
 
     return (
@@ -37,7 +49,14 @@ export default function DebtsPage() {
                             </div>
                         ) : debts.length > 0 ? (
                             <div className="space-y-4">
-                                {debts.map((debt) => (
+                                {debts.map((debt) => {
+                                    const totalAmount = Number(debt.total_amount || 0);
+                                    const monthlyPayment = Number(debt.monthly_payment || 0);
+                                    const remainingInstallments = Number(debt.remaining_installments || 0);
+                                    const isSettled = totalAmount <= 0 || remainingInstallments <= 0;
+                                    const isProcessing = isConfirmingDebtPayment && processingDebtId === debt.id;
+
+                                    return (
                                     <div key={debt.id} className="p-4 border rounded-lg space-y-3">
                                         <div className="flex justify-between items-start">
                                             <div>
@@ -45,19 +64,21 @@ export default function DebtsPage() {
                                                 <p className="text-xs text-muted-foreground uppercase">{debt.category}</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-red-500 text-lg">{formatCurrency(debt.total_amount)}</p>
-                                                <p className="text-xs text-muted-foreground">Total</p>
+                                                <p className={`font-bold text-lg ${isSettled ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    {formatCurrency(totalAmount)}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">{isSettled ? 'Saldada' : 'Pendiente'}</p>
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4 pt-2 border-t text-sm">
                                             <div className="flex items-center gap-2">
                                                 <CreditCard className="w-4 h-4 text-muted-foreground" />
-                                                <span>Cuota: {formatCurrency(debt.monthly_payment)}</span>
+                                                <span>Cuota: {formatCurrency(monthlyPayment)}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                                                <span>Restan: {debt.remaining_installments}/{debt.total_installments}</span>
+                                                <span>Restan: {remainingInstallments}/{debt.total_installments}</span>
                                             </div>
                                         </div>
 
@@ -65,8 +86,23 @@ export default function DebtsPage() {
                                             <ArrowRight className="w-3 h-3" />
                                             <span>Próximo vencimiento: {new Date(debt.next_payment_date).toLocaleDateString('es-AR')}</span>
                                         </div>
+
+                                        <Button
+                                            type="button"
+                                            onClick={() => debt.id && handleConfirmPayment(debt.id)}
+                                            disabled={!debt.id || isProcessing || isConfirmingDebtPayment || isSettled}
+                                            className="w-full"
+                                            variant={isSettled ? 'secondary' : 'default'}
+                                        >
+                                            {isProcessing ? (
+                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                            )}
+                                            {isSettled ? 'Deuda saldada' : 'Confirmar pago debitado'}
+                                        </Button>
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         ) : (
                             <p className="text-center text-muted-foreground py-8">No tienes deudas registradas.</p>

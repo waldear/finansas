@@ -2,6 +2,13 @@ import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tansta
 import { Debt, SavingsGoal } from '@/lib/schemas';
 import { toast } from 'sonner';
 
+type ConfirmDebtPaymentInput = {
+    debtId: string;
+    paymentAmount?: number;
+    paymentDate?: string;
+    description?: string;
+};
+
 export function useFinance() {
     const queryClient = useQueryClient();
 
@@ -71,6 +78,40 @@ export function useFinance() {
         },
     });
 
+    const confirmDebtPayment = useMutation({
+        mutationFn: async (payload: ConfirmDebtPaymentInput) => {
+            const { debtId, paymentAmount, paymentDate, description } = payload;
+            const res = await fetch(`/api/debts/${debtId}/confirm-payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    payment_amount: paymentAmount,
+                    payment_date: paymentDate,
+                    description,
+                }),
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo confirmar el pago');
+            return body;
+        },
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ['debts'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['obligations'] });
+
+            if (result?.obligationUpdated) {
+                toast.success('Pago confirmado y obligación marcada como pagada');
+                return;
+            }
+
+            toast.success('Pago confirmado correctamente');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo confirmar el pago');
+        },
+    });
+
     return {
         debts: debtsQuery.data || [],
         isLoadingDebts: debtsQuery.isLoading,
@@ -80,7 +121,9 @@ export function useFinance() {
         goalsError: goalsQuery.error instanceof Error ? goalsQuery.error.message : null,
         addDebt: addDebt.mutateAsync,
         addGoal: addGoal.mutateAsync,
+        confirmDebtPayment: confirmDebtPayment.mutateAsync,
         isAddingDebt: addDebt.isPending,
         isAddingGoal: addGoal.isPending,
+        isConfirmingDebtPayment: confirmDebtPayment.isPending,
     };
 }

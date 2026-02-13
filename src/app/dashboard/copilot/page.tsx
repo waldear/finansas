@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { ReceiptUploader } from '@/components/copilot/receipt-uploader';
 import { ExtractionVerifier } from '@/components/copilot/extraction-verifier';
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 type CopilotStep = 'upload' | 'verify' | 'success';
 
 export default function CopilotPage() {
+    const queryClient = useQueryClient();
     const [isReady, setIsReady] = useState(false);
     const [step, setStep] = useState<CopilotStep>('upload');
     const [extractedData, setExtractedData] = useState<any>(null);
@@ -28,7 +30,7 @@ export default function CopilotPage() {
         setIsSaving(true);
 
         try {
-            const response = await fetch('/api/obligations', {
+            const obligationResponse = await fetch('/api/obligations', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -42,12 +44,53 @@ export default function CopilotPage() {
                 }),
             });
 
-            const body = await response.json().catch(() => null);
-            if (!response.ok) {
-                throw new Error(body?.error || 'No se pudo guardar la obligación');
+            const obligationBody = await obligationResponse.json().catch(() => null);
+            if (!obligationResponse.ok) {
+                throw new Error(obligationBody?.error || 'No se pudo guardar la obligación');
             }
 
-            toast.success('¡Obligación guardada correctamente!');
+            const isDebtLikeDocument = extractedData?.type === 'credit_card' || extractedData?.type === 'invoice';
+            let debtWarning: string | null = null;
+
+            if (isDebtLikeDocument) {
+                const normalizedAmount = Number(formData.amount || 0);
+                const normalizedMinimumPayment = Number(formData.minimum_payment || 0);
+                const monthlyPayment = normalizedMinimumPayment > 0 ? normalizedMinimumPayment : normalizedAmount;
+
+                const debtResponse = await fetch('/api/debts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        name: formData.title,
+                        total_amount: normalizedAmount,
+                        monthly_payment: monthlyPayment,
+                        remaining_installments: 1,
+                        total_installments: 1,
+                        category: formData.category || 'Deuda',
+                        next_payment_date: formData.due_date,
+                    }),
+                });
+
+                const debtBody = await debtResponse.json().catch(() => null);
+                if (!debtResponse.ok) {
+                    debtWarning = debtBody?.error || 'No se pudo registrar automáticamente en deudas.';
+                }
+            }
+
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['obligations'] }),
+                queryClient.invalidateQueries({ queryKey: ['debts'] }),
+            ]);
+
+            if (debtWarning) {
+                toast.warning(`Obligación guardada. ${debtWarning}`);
+            } else if (isDebtLikeDocument) {
+                toast.success('¡Obligación y deuda guardadas correctamente!');
+            } else {
+                toast.success('¡Obligación guardada correctamente!');
+            }
+
             setStep('success');
 
         } catch (error: any) {
