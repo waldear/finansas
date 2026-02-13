@@ -29,6 +29,19 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             return NextResponse.json({ error: 'Job no encontrado' }, { status: 404 });
         }
 
+        let extractionId: string | null = null;
+        if (job.document_id) {
+            const { data: extraction } = await supabase
+                .from('extractions')
+                .select('id')
+                .eq('document_id', job.document_id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            extractionId = extraction?.id || null;
+        }
+
         logInfo('document_job_status_checked', {
             ...context,
             userId: user.id,
@@ -44,6 +57,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
             error: job.error_message,
             data: job.extraction_json,
             documentId: job.document_id,
+            extractionId,
             createdAt: job.created_at,
             updatedAt: job.updated_at,
         });

@@ -56,6 +56,14 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
         setFile(null);
     };
 
+    const emitUploadComplete = (payload: any, documentId?: string | null, extractionId?: string | null) => {
+        onUploadComplete({
+            ...payload,
+            _documentId: documentId || null,
+            _extractionId: extractionId || null,
+        });
+    };
+
     const handleUpload = async () => {
         if (!file) return;
 
@@ -89,10 +97,25 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
             setUploadProgress(25);
 
             if (result.jobId) {
-                await fetch(`/api/documents/jobs/${result.jobId}/run`, {
+                const runResponse = await fetch(`/api/documents/jobs/${result.jobId}/run`, {
                     method: 'POST',
                     credentials: 'include',
                 });
+
+                const runBody = await runResponse.json().catch(() => null);
+                if (!runResponse.ok) {
+                    throw new Error(runBody?.error || 'No se pudo iniciar el procesamiento del documento.');
+                }
+
+                if (runBody?.status === 'completed' && runBody?.data) {
+                    setUploadProgress(100);
+                    toast.success('Documento procesado con éxito');
+
+                    setTimeout(() => {
+                        emitUploadComplete(runBody.data, runBody.documentId, runBody.extractionId);
+                    }, 500);
+                    return;
+                }
 
                 for (let attempt = 0; attempt < 45; attempt++) {
                     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -114,7 +137,7 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
                         }
 
                         setTimeout(() => {
-                            onUploadComplete(statusBody.data);
+                            emitUploadComplete(statusBody.data, statusBody.documentId, statusBody.extractionId);
                         }, 500);
                         return;
                     }
@@ -138,7 +161,7 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
 
             // Short delay to show 100% completion
             setTimeout(() => {
-                onUploadComplete(result.data);
+                emitUploadComplete(result.data);
             }, 500);
 
         } catch (error: any) {

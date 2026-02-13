@@ -14,6 +14,11 @@ import { toast } from 'sonner';
 
 type CopilotStep = 'upload' | 'verify' | 'success';
 
+function toSafeNumber(value: unknown) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export default function CopilotPage() {
     const queryClient = useQueryClient();
     const [isReady, setIsReady] = useState(false);
@@ -30,65 +35,44 @@ export default function CopilotPage() {
         setIsSaving(true);
 
         try {
-            const obligationResponse = await fetch('/api/obligations', {
+            const isDebtLikeDocument = extractedData?.type === 'credit_card' || extractedData?.type === 'invoice';
+            const confirmationResponse = await fetch('/api/copilot/confirm', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
                     title: formData.title,
-                    amount: formData.amount,
+                    amount: toSafeNumber(formData.amount),
                     due_date: formData.due_date,
-                    status: 'pending',
                     category: formData.category || 'Varios',
                     minimum_payment: formData.minimum_payment || null,
+                    document_type: extractedData?.type || 'other',
+                    document_id: extractedData?._documentId || null,
+                    extraction_id: extractedData?._extractionId || null,
+                    create_debt: isDebtLikeDocument,
+                    mark_paid: Boolean(formData.mark_paid),
+                    payment_date: formData.mark_paid ? formData.payment_date : null,
                 }),
             });
 
-            const obligationBody = await obligationResponse.json().catch(() => null);
-            if (!obligationResponse.ok) {
-                throw new Error(obligationBody?.error || 'No se pudo guardar la obligación');
-            }
-
-            const isDebtLikeDocument = extractedData?.type === 'credit_card' || extractedData?.type === 'invoice';
-            let debtWarning: string | null = null;
-
-            if (isDebtLikeDocument) {
-                const normalizedAmount = Number(formData.amount || 0);
-                const normalizedMinimumPayment = Number(formData.minimum_payment || 0);
-                const monthlyPayment = normalizedMinimumPayment > 0 ? normalizedMinimumPayment : normalizedAmount;
-
-                const debtResponse = await fetch('/api/debts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        name: formData.title,
-                        total_amount: normalizedAmount,
-                        monthly_payment: monthlyPayment,
-                        remaining_installments: 1,
-                        total_installments: 1,
-                        category: formData.category || 'Deuda',
-                        next_payment_date: formData.due_date,
-                    }),
-                });
-
-                const debtBody = await debtResponse.json().catch(() => null);
-                if (!debtResponse.ok) {
-                    debtWarning = debtBody?.error || 'No se pudo registrar automáticamente en deudas.';
-                }
+            const confirmationBody = await confirmationResponse.json().catch(() => null);
+            if (!confirmationResponse.ok) {
+                throw new Error(confirmationBody?.error || 'No se pudo guardar la confirmación del documento');
             }
 
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['obligations'] }),
                 queryClient.invalidateQueries({ queryKey: ['debts'] }),
+                queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+                queryClient.invalidateQueries({ queryKey: ['budgets'] }),
             ]);
 
-            if (debtWarning) {
-                toast.warning(`Obligación guardada. ${debtWarning}`);
-            } else if (isDebtLikeDocument) {
-                toast.success('¡Obligación y deuda guardadas correctamente!');
+            if (confirmationBody?.transaction?.id) {
+                toast.success('Pago registrado: se actualizó obligación y transacción.');
+            } else if (confirmationBody?.debt?.id) {
+                toast.success('Obligación y deuda registradas correctamente.');
             } else {
-                toast.success('¡Obligación guardada correctamente!');
+                toast.success('Obligación guardada correctamente.');
             }
 
             setStep('success');
