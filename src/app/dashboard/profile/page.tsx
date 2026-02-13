@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase-browser';
-import { Loader2, Save, ShieldCheck, UserCircle2 } from 'lucide-react';
+import { Crown, ExternalLink, Loader2, Save, ShieldCheck, UserCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 function providerLabel(provider: string) {
@@ -24,6 +24,10 @@ export default function ProfilePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [fullName, setFullName] = useState('');
     const [avatarUrl, setAvatarUrl] = useState('');
+    const [billing, setBilling] = useState<any>(null);
+    const [isLoadingBilling, setIsLoadingBilling] = useState(false);
+    const [isStartingCheckout, setIsStartingCheckout] = useState(false);
+    const [isOpeningPortal, setIsOpeningPortal] = useState(false);
 
     useEffect(() => {
         const supabase = createClient();
@@ -46,6 +50,29 @@ export default function ProfilePage() {
         };
 
         loadUser();
+    }, []);
+
+    useEffect(() => {
+        const loadBilling = async () => {
+            try {
+                setIsLoadingBilling(true);
+                const response = await fetch('/api/billing/entitlement', {
+                    credentials: 'include',
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                    return;
+                }
+                setBilling(payload);
+            } catch {
+                // no-op
+            } finally {
+                setIsLoadingBilling(false);
+            }
+        };
+
+        void loadBilling();
     }, []);
 
     const providers = useMemo(() => {
@@ -92,6 +119,65 @@ export default function ProfilePage() {
         toast.success('Perfil actualizado');
         setIsSaving(false);
     };
+
+    const handleStartCheckout = async () => {
+        setIsStartingCheckout(true);
+        try {
+            const response = await fetch('/api/billing/checkout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                if (response.status === 409) {
+                    toast.info(payload?.error || 'Tu suscripción Pro ya está activa.');
+                    return;
+                }
+                throw new Error(payload?.error || 'No se pudo iniciar el checkout.');
+            }
+
+            if (!payload?.url) {
+                throw new Error('Stripe no devolvió URL de checkout.');
+            }
+
+            window.location.assign(payload.url);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo iniciar el checkout.');
+        } finally {
+            setIsStartingCheckout(false);
+        }
+    };
+
+    const handleOpenPortal = async () => {
+        setIsOpeningPortal(true);
+        try {
+            const response = await fetch('/api/billing/portal', {
+                method: 'POST',
+                credentials: 'include',
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo abrir el portal de suscripción.');
+            }
+
+            if (!payload?.url) {
+                throw new Error('Stripe no devolvió URL del portal.');
+            }
+
+            window.location.assign(payload.url);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo abrir el portal de suscripción.');
+        } finally {
+            setIsOpeningPortal(false);
+        }
+    };
+
+    const billingPlan = billing?.plan === 'pro' ? 'pro' : 'free';
+    const billingProvider = typeof billing?.provider === 'string' ? billing.provider : 'none';
+    const remaining = Number(billing?.usage?.remainingRequests ?? 0);
+    const limit = Number(billing?.usage?.limitRequests ?? 0);
 
     if (isLoading) {
         return (
@@ -201,6 +287,76 @@ export default function ProfilePage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Crown className="h-5 w-5 text-primary" />
+                        Plan y suscripción
+                    </CardTitle>
+                    <CardDescription>
+                        Gestiona tu plan Pro y revisa tu uso del asistente.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {isLoadingBilling ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Cargando estado...
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant={billingPlan === 'pro' ? 'default' : 'secondary'}>
+                                        {billingPlan === 'pro' ? 'PRO' : 'FREE'}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                        Provider: {billingProvider}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                    Asistente: {remaining}/{limit} requests restantes este mes
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {billingPlan !== 'pro' && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleStartCheckout}
+                                        disabled={isStartingCheckout || isOpeningPortal}
+                                        className="gap-2"
+                                    >
+                                        {isStartingCheckout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crown className="h-4 w-4" />}
+                                        Pasar a Pro
+                                    </Button>
+                                )}
+                                {(billingProvider === 'stripe' || billingPlan === 'pro') && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleOpenPortal}
+                                        disabled={isOpeningPortal || isStartingCheckout}
+                                        className="gap-2"
+                                    >
+                                        {isOpeningPortal ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                                        Gestionar suscripción
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                        <p className="font-medium text-foreground">Tip</p>
+                        <p className="mt-1">
+                            Si estás en modo test, usa la tarjeta <span className="font-mono">4242 4242 4242 4242</span> para probar el checkout.
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }
