@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function NotificationCenter() {
-    const { insight, isLoading } = useCopilot();
+    const { insight } = useCopilot();
 
     // Filter for "High Priority" items (Priority 1)
     const alerts = insight.weeklyActions?.filter(action => action.priority === 1 && !action.isCompleted) || [];

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
     BarChart3,
     Brain,
@@ -45,6 +46,7 @@ const navItems = [
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const queryClient = useQueryClient();
     const [user, setUser] = useState<any>(null);
     const [theme, setTheme] = useState<AppTheme>('light');
 
@@ -84,6 +86,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
     const handleSignOut = async () => {
         const supabase = createClient();
+        queryClient.clear();
         if (!supabase) {
             window.location.href = '/auth';
             return;
@@ -104,6 +107,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                                     className="relative h-12 w-12 rounded-full border-2 border-primary/20 p-0.5 transition hover:border-primary/40"
                                     aria-label="Abrir configuración de perfil"
                                 >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
                                         src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email || 'default'}`}
                                         alt="Avatar"

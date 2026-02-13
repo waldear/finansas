@@ -126,6 +126,7 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex items-center gap-4">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={previewAvatar}
                                 alt="Avatar de perfil"

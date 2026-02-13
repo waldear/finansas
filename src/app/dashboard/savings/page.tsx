@@ -6,7 +6,7 @@ import { useFinance } from '@/hooks/use-finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { SavingsForm } from '@/components/finance/savings-form';
-import { Loader2, PiggyBank, Target, Calendar } from 'lucide-react';
+import { Loader2, PiggyBank, Calendar } from 'lucide-react';
 
 const GoalIcon = ({ style, children, className }: any) => React.createElement('div', { style, className }, children);
 const GoalBadge = ({ style, children, className }: any) => React.createElement('p', { style, className }, children);

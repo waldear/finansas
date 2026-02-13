@@ -1,6 +1,11 @@
-import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Transaction } from '@/lib/schemas';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Transaction, TransactionInput, TransactionUpdate } from '@/lib/schemas';
 import { toast } from 'sonner';
+
+type UpdateTransactionInput = {
+    id: string;
+    changes: TransactionUpdate;
+};
 
 export function useTransactions() {
     const queryClient = useQueryClient();
@@ -14,11 +19,10 @@ export function useTransactions() {
             return (body || []) as Transaction[];
         },
         staleTime: 5 * 60 * 1000,
-        placeholderData: keepPreviousData,
     });
 
     const addTransaction = useMutation({
-        mutationFn: async (newTransaction: Transaction) => {
+        mutationFn: async (newTransaction: TransactionInput) => {
             const res = await fetch('/api/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -39,11 +43,58 @@ export function useTransactions() {
         },
     });
 
+    const updateTransaction = useMutation({
+        mutationFn: async ({ id, changes }: UpdateTransactionInput) => {
+            const res = await fetch(`/api/transactions/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(changes),
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo actualizar la transacción');
+            return body as Transaction;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
+            toast.success('Transacción actualizada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo actualizar la transacción');
+        },
+    });
+
+    const deleteTransaction = useMutation({
+        mutationFn: async (transactionId: string) => {
+            const res = await fetch(`/api/transactions/${transactionId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo eliminar la transacción');
+            return body as { success: boolean; id: string };
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
+            toast.success('Transacción eliminada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo eliminar la transacción');
+        },
+    });
+
     return {
         transactions: transactionsQuery.data || [],
         isLoading: transactionsQuery.isLoading,
         error: transactionsQuery.error instanceof Error ? transactionsQuery.error.message : null,
         addTransaction: addTransaction.mutate,
+        addTransactionAsync: addTransaction.mutateAsync,
         isAdding: addTransaction.isPending,
+        updateTransaction: updateTransaction.mutateAsync,
+        isUpdating: updateTransaction.isPending,
+        deleteTransaction: deleteTransaction.mutateAsync,
+        isDeleting: deleteTransaction.isPending,
     };
 }

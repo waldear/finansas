@@ -24,7 +24,6 @@ export default function CopilotPage() {
     const [isReady, setIsReady] = useState(false);
     const [step, setStep] = useState<CopilotStep>('upload');
     const [extractedData, setExtractedData] = useState<any>(null);
-    const [isSaving, setIsSaving] = useState(false);
 
     const handleExtractionComplete = (data: any) => {
         setExtractedData(data);
@@ -32,8 +31,6 @@ export default function CopilotPage() {
     };
 
     const handleVerificationConfirm = async (formData: any) => {
-        setIsSaving(true);
-
         try {
             const isDebtLikeDocument = extractedData?.type === 'credit_card' || extractedData?.type === 'invoice';
             const confirmationResponse = await fetch('/api/copilot/confirm', {
@@ -80,8 +77,6 @@ export default function CopilotPage() {
         } catch (error: any) {
             console.error('Error saving obligation:', error);
             toast.error('Error al guardar: ' + error.message);
-        } finally {
-            setIsSaving(false);
         }
     };
 

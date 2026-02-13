@@ -14,6 +14,19 @@ export const TransactionSchema = z.object({
     created_at: z.string().optional(),
 });
 
+export const TransactionInputSchema = TransactionSchema.omit({
+    id: true,
+    user_id: true,
+    created_at: true,
+});
+
+export const TransactionUpdateSchema = TransactionInputSchema.partial().refine(
+    (payload) => Object.keys(payload).length > 0,
+    {
+        message: 'Debes enviar al menos un campo para actualizar',
+    }
+);
+
 export const ObligationSchema = z.object({
     id: z.string().uuid().optional(),
     user_id: z.string().uuid().optional(),
@@ -74,6 +87,8 @@ export const RecurringTransactionSchema = z.object({
 });
 
 export type Transaction = z.infer<typeof TransactionSchema>;
+export type TransactionInput = z.infer<typeof TransactionInputSchema>;
+export type TransactionUpdate = z.infer<typeof TransactionUpdateSchema>;
 export type Obligation = z.infer<typeof ObligationSchema>;
 export type Debt = z.infer<typeof DebtSchema>;
 export type SavingsGoal = z.infer<typeof SavingsGoalSchema>;

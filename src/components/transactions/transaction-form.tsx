@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { TransactionSchema, Transaction } from '@/lib/schemas';
+import { TransactionInputSchema, TransactionInput } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,15 +14,15 @@ import { Loader2 } from 'lucide-react';
 export function TransactionForm() {
     const { addTransaction, isAdding } = useTransactions();
 
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<Transaction>({
-        resolver: zodResolver(TransactionSchema),
+    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<TransactionInput>({
+        resolver: zodResolver(TransactionInputSchema),
         defaultValues: {
             type: 'expense',
             date: new Date().toISOString().split('T')[0],
         }
     });
 
-    const onSubmit = (data: Transaction) => {
+    const onSubmit = (data: TransactionInput) => {
         addTransaction(data, {
             onSuccess: () => reset()
         });

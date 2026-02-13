@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -23,7 +23,7 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
     const [health, setHealth] = useState<SystemHealth | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const checkHealth = async () => {
+    const checkHealth = useCallback(async () => {
         setIsLoading(true);
         try {
             const res = await fetch('/api/system/health');
@@ -39,11 +39,11 @@ export function SetupCheck({ onReady }: { onReady: () => void }) {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [onReady]);
 
     useEffect(() => {
         checkHealth();
-    }, []);
+    }, [checkHealth]);
 
     if (isLoading) {
         return (

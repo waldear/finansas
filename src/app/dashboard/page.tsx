@@ -8,8 +8,6 @@ import { usePlanning } from '@/hooks/use-planning';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
-    CreditCard,
-    PiggyBank,
     TrendingUp,
     Wallet,
     Plus,
@@ -29,7 +27,7 @@ import Link from 'next/link';
 const NET_WORTH_VISIBILITY_KEY = 'finansas-net-worth-visible';
 
 export default function DashboardPage() {
-    const { debts, savingsGoals, transactions, isLoading } = useDashboard();
+    const { debts, transactions, isLoading } = useDashboard();
     const { budgets, recurringTransactions, runRecurring } = usePlanning();
     const recurringRanRef = useRef(false);
     const [isNetWorthVisible, setIsNetWorthVisible] = useState(true);
@@ -161,7 +159,7 @@ export default function DashboardPage() {
         return <DashboardSkeleton />;
     }
 
-    const { totalIncome, totalExpenses, totalDebt, balance } = financialStats;
+    const { totalExpenses, totalDebt, balance } = financialStats;
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">

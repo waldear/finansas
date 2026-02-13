@@ -10,6 +10,7 @@ import { BudgetForm } from '@/components/planning/budget-form';
 import { RecurringForm } from '@/components/planning/recurring-form';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 function currentMonth() {
     const now = new Date();
@@ -33,15 +34,20 @@ export default function TransactionsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-3xl font-bold tracking-tight">Transacciones</h2>
-                <Button
-                    variant="outline"
-                    onClick={() => runRecurring()}
-                    disabled={isRunningRecurring}
-                    className="gap-2"
-                >
-                    <RefreshCcw className={cn('h-4 w-4', isRunningRecurring && 'animate-spin')} />
-                    Ejecutar Recurrencias
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button asChild variant="ghost">
+                        <Link href="/dashboard/history">Editar / Eliminar Movimientos</Link>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => runRecurring()}
+                        disabled={isRunningRecurring}
+                        className="gap-2"
+                    >
+                        <RefreshCcw className={cn('h-4 w-4', isRunningRecurring && 'animate-spin')} />
+                        Ejecutar Recurrencias
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">

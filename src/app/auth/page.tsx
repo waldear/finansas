@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase-browser';
 import { sanitizeEnv } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -120,6 +121,7 @@ export default function AuthPage() {
     const [loginMethod, setLoginMethod] = useState<'password' | 'magic-link'>('password');
 
     const router = useRouter();
+    const queryClient = useQueryClient();
     const supabase = useMemo(() => createClient(), []);
 
     const buildCallbackUrl = () => {
@@ -141,6 +143,10 @@ export default function AuthPage() {
 
         return '/auth/callback';
     };
+
+    useEffect(() => {
+        queryClient.clear();
+    }, [queryClient]);
 
     useEffect(() => {
         if (!supabase) return;

@@ -1,9 +1,8 @@
 
 'use client';
 
-import { useCopilot, type WeeklyAction } from '@/hooks/use-copilot';
+import { useCopilot } from '@/hooks/use-copilot';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { CheckCircle2, Circle, ArrowRight, ShieldAlert, Rocket, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -11,7 +10,7 @@ import { toast } from 'sonner';
 export function WeeklyPlan() {
     const { insight, isLoading } = useCopilot();
 
-    const handleCompleteAction = (actionId: string) => {
+    const handleCompleteAction = () => {
         // In a real app, this would mutate state in DB
         toast.success('¡Acción completada! Tu plan se actualizará pronto.');
     };
@@ -69,7 +68,7 @@ export function WeeklyPlan() {
                         insight.weeklyActions.map((action) => (
                             <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors group">
                                 <button
-                                    onClick={() => handleCompleteAction(action.id)}
+                                    onClick={handleCompleteAction}
                                     className="mt-0.5 text-muted-foreground hover:text-primary transition-colors"
                                 >
                                     {action.isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
