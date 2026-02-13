@@ -51,6 +51,18 @@ export const DebtSchema = z.object({
     next_payment_date: z.string(),
 });
 
+export const DebtInputSchema = DebtSchema.omit({
+    id: true,
+    user_id: true,
+});
+
+export const DebtUpdateSchema = DebtInputSchema.partial().refine(
+    (payload) => Object.keys(payload).length > 0,
+    {
+        message: 'Debes enviar al menos un campo para actualizar',
+    }
+);
+
 export const SavingsGoalSchema = z.object({
     id: z.string().uuid().optional(),
     user_id: z.string().uuid().optional(),
@@ -64,6 +76,18 @@ export const SavingsGoalSchema = z.object({
     is_completed: z.boolean().default(false),
 });
 
+export const SavingsGoalInputSchema = SavingsGoalSchema.omit({
+    id: true,
+    user_id: true,
+});
+
+export const SavingsGoalUpdateSchema = SavingsGoalInputSchema.partial().refine(
+    (payload) => Object.keys(payload).length > 0,
+    {
+        message: 'Debes enviar al menos un campo para actualizar',
+    }
+);
+
 export const BudgetSchema = z.object({
     id: z.string().uuid().optional(),
     user_id: z.string().uuid().optional(),
@@ -72,6 +96,18 @@ export const BudgetSchema = z.object({
     limit_amount: z.coerce.number().positive('El límite debe ser mayor a 0'),
     alert_threshold: z.coerce.number().min(1).max(100).default(80),
 });
+
+export const BudgetInputSchema = BudgetSchema.omit({
+    id: true,
+    user_id: true,
+});
+
+export const BudgetUpdateSchema = BudgetInputSchema.partial().refine(
+    (payload) => Object.keys(payload).length > 0,
+    {
+        message: 'Debes enviar al menos un campo para actualizar',
+    }
+);
 
 export const RecurringTransactionSchema = z.object({
     id: z.string().uuid().optional(),
@@ -86,11 +122,31 @@ export const RecurringTransactionSchema = z.object({
     is_active: z.boolean().default(true),
 });
 
+export const RecurringTransactionInputSchema = RecurringTransactionSchema.omit({
+    id: true,
+    user_id: true,
+});
+
+export const RecurringTransactionUpdateSchema = RecurringTransactionInputSchema.partial().refine(
+    (payload) => Object.keys(payload).length > 0,
+    {
+        message: 'Debes enviar al menos un campo para actualizar',
+    }
+);
+
 export type Transaction = z.infer<typeof TransactionSchema>;
 export type TransactionInput = z.infer<typeof TransactionInputSchema>;
 export type TransactionUpdate = z.infer<typeof TransactionUpdateSchema>;
 export type Obligation = z.infer<typeof ObligationSchema>;
 export type Debt = z.infer<typeof DebtSchema>;
+export type DebtInput = z.infer<typeof DebtInputSchema>;
+export type DebtUpdate = z.infer<typeof DebtUpdateSchema>;
 export type SavingsGoal = z.infer<typeof SavingsGoalSchema>;
+export type SavingsGoalInput = z.infer<typeof SavingsGoalInputSchema>;
+export type SavingsGoalUpdate = z.infer<typeof SavingsGoalUpdateSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
+export type BudgetInput = z.infer<typeof BudgetInputSchema>;
+export type BudgetUpdate = z.infer<typeof BudgetUpdateSchema>;
 export type RecurringTransaction = z.infer<typeof RecurringTransactionSchema>;
+export type RecurringTransactionInput = z.infer<typeof RecurringTransactionInputSchema>;
+export type RecurringTransactionUpdate = z.infer<typeof RecurringTransactionUpdateSchema>;

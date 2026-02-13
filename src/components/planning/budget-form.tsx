@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Budget, BudgetSchema } from '@/lib/schemas';
+import { BudgetInput, BudgetInputSchema } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,15 +17,15 @@ function currentMonth() {
 
 export function BudgetForm() {
     const { addBudget, isAddingBudget } = usePlanning(currentMonth());
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<Budget>({
-        resolver: zodResolver(BudgetSchema),
+    const { register, handleSubmit, reset, formState: { errors } } = useForm<BudgetInput>({
+        resolver: zodResolver(BudgetInputSchema),
         defaultValues: {
             month: currentMonth(),
             alert_threshold: 80,
         },
     });
 
-    const onSubmit = async (data: Budget) => {
+    const onSubmit = async (data: BudgetInput) => {
         try {
             await addBudget(data);
             reset({

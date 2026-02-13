@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Debt, SavingsGoal } from '@/lib/schemas';
+import { Debt, DebtInput, DebtUpdate, SavingsGoal, SavingsGoalInput, SavingsGoalUpdate } from '@/lib/schemas';
 import { toast } from 'sonner';
 
 type ConfirmDebtPaymentInput = {
@@ -7,6 +7,16 @@ type ConfirmDebtPaymentInput = {
     paymentAmount?: number;
     paymentDate?: string;
     description?: string;
+};
+
+type UpdateDebtInput = {
+    debtId: string;
+    changes: DebtUpdate;
+};
+
+type UpdateGoalInput = {
+    goalId: string;
+    changes: SavingsGoalUpdate;
 };
 
 export function useFinance() {
@@ -37,7 +47,7 @@ export function useFinance() {
     });
 
     const addDebt = useMutation({
-        mutationFn: async (newDebt: Debt) => {
+        mutationFn: async (newDebt: DebtInput) => {
             const res = await fetch('/api/debts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -58,7 +68,7 @@ export function useFinance() {
     });
 
     const addGoal = useMutation({
-        mutationFn: async (newGoal: SavingsGoal) => {
+        mutationFn: async (newGoal: SavingsGoalInput) => {
             const res = await fetch('/api/savings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -75,6 +85,86 @@ export function useFinance() {
         },
         onError: (error: any) => {
             toast.error(error.message || 'Error al agregar meta');
+        },
+    });
+
+    const updateDebt = useMutation({
+        mutationFn: async ({ debtId, changes }: UpdateDebtInput) => {
+            const res = await fetch(`/api/debts/${debtId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(changes),
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo actualizar la deuda');
+            return body as Debt;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['debts'] });
+            toast.success('Deuda actualizada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo actualizar la deuda');
+        },
+    });
+
+    const deleteDebt = useMutation({
+        mutationFn: async (debtId: string) => {
+            const res = await fetch(`/api/debts/${debtId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo eliminar la deuda');
+            return body as { success: boolean; id: string };
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['debts'] });
+            toast.success('Deuda eliminada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo eliminar la deuda');
+        },
+    });
+
+    const updateGoal = useMutation({
+        mutationFn: async ({ goalId, changes }: UpdateGoalInput) => {
+            const res = await fetch(`/api/savings/${goalId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(changes),
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo actualizar la meta');
+            return body as SavingsGoal;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['savings'] });
+            toast.success('Meta actualizada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo actualizar la meta');
+        },
+    });
+
+    const deleteGoal = useMutation({
+        mutationFn: async (goalId: string) => {
+            const res = await fetch(`/api/savings/${goalId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            const body = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(body?.error || 'No se pudo eliminar la meta');
+            return body as { success: boolean; id: string };
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['savings'] });
+            toast.success('Meta eliminada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'No se pudo eliminar la meta');
         },
     });
 
@@ -122,9 +212,17 @@ export function useFinance() {
         goalsError: goalsQuery.error instanceof Error ? goalsQuery.error.message : null,
         addDebt: addDebt.mutateAsync,
         addGoal: addGoal.mutateAsync,
+        updateDebt: updateDebt.mutateAsync,
+        deleteDebt: deleteDebt.mutateAsync,
+        updateGoal: updateGoal.mutateAsync,
+        deleteGoal: deleteGoal.mutateAsync,
         confirmDebtPayment: confirmDebtPayment.mutateAsync,
         isAddingDebt: addDebt.isPending,
         isAddingGoal: addGoal.isPending,
+        isUpdatingDebt: updateDebt.isPending,
+        isDeletingDebt: deleteDebt.isPending,
+        isUpdatingGoal: updateGoal.isPending,
+        isDeletingGoal: deleteGoal.isPending,
         isConfirmingDebtPayment: confirmDebtPayment.isPending,
     };
 }

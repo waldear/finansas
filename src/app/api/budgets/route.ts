@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { BudgetSchema } from '@/lib/schemas';
+import { BudgetInputSchema } from '@/lib/schemas';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
 
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const payload = await req.json();
-        const validated = BudgetSchema.parse(payload);
+        const validated = BudgetInputSchema.parse(payload);
 
         const { data, error } = await supabase
             .from('budgets')
@@ -156,11 +156,12 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const parsedError = error as { errors?: unknown; message?: string };
         logError('budget_upsert_exception', error, {
             ...context,
             durationMs: Date.now() - startedAt,
         });
-        return NextResponse.json({ error: error.errors || error.message }, { status: 400 });
+        return NextResponse.json({ error: parsedError.errors || parsedError.message || 'Datos inválidos' }, { status: 400 });
     }
 }

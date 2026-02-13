@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { SavingsGoalSchema, SavingsGoal } from '@/lib/schemas';
+import { SavingsGoalInputSchema, SavingsGoalInput } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,8 @@ import { Loader2 } from 'lucide-react';
 export function SavingsForm() {
     const { addGoal, isAddingGoal } = useFinance();
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<SavingsGoal>({
-        resolver: zodResolver(SavingsGoalSchema),
+    const { register, handleSubmit, reset, formState: { errors } } = useForm<SavingsGoalInput>({
+        resolver: zodResolver(SavingsGoalInputSchema),
         defaultValues: {
             current_amount: 0,
             color: '#3b82f6',
@@ -23,7 +23,7 @@ export function SavingsForm() {
         }
     });
 
-    const onSubmit = async (data: SavingsGoal) => {
+    const onSubmit = async (data: SavingsGoalInput) => {
         try {
             await addGoal(data);
             reset({

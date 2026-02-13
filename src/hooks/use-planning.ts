@@ -1,6 +1,23 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Budget, RecurringTransaction } from '@/lib/schemas';
+import {
+    Budget,
+    BudgetInput,
+    BudgetUpdate,
+    RecurringTransaction,
+    RecurringTransactionInput,
+    RecurringTransactionUpdate,
+} from '@/lib/schemas';
+
+type UpdateBudgetInput = {
+    budgetId: string;
+    changes: BudgetUpdate;
+};
+
+type UpdateRecurringInput = {
+    recurringId: string;
+    changes: RecurringTransactionUpdate;
+};
 
 function currentMonth() {
     const now = new Date();
@@ -40,7 +57,7 @@ export function usePlanning(month = currentMonth()) {
     });
 
     const addBudget = useMutation({
-        mutationFn: async (budget: Budget) => {
+        mutationFn: async (budget: BudgetInput) => {
             const response = await fetch('/api/budgets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -62,7 +79,7 @@ export function usePlanning(month = currentMonth()) {
     });
 
     const addRecurring = useMutation({
-        mutationFn: async (rule: RecurringTransaction) => {
+        mutationFn: async (rule: RecurringTransactionInput) => {
             const response = await fetch('/api/recurring', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -80,6 +97,90 @@ export function usePlanning(month = currentMonth()) {
         },
         onError: (error: any) => {
             toast.error(error.message || 'Error al guardar recurrencia');
+        },
+    });
+
+    const updateBudget = useMutation({
+        mutationFn: async ({ budgetId, changes }: UpdateBudgetInput) => {
+            const response = await fetch(`/api/budgets/${budgetId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(changes),
+            });
+
+            const body = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(body?.error || 'Error al actualizar presupuesto');
+            return body as Budget;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
+            toast.success('Presupuesto actualizado');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Error al actualizar presupuesto');
+        },
+    });
+
+    const deleteBudget = useMutation({
+        mutationFn: async (budgetId: string) => {
+            const response = await fetch(`/api/budgets/${budgetId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+
+            const body = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(body?.error || 'Error al eliminar presupuesto');
+            return body as { success: boolean; id: string };
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['budgets'] });
+            toast.success('Presupuesto eliminado');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Error al eliminar presupuesto');
+        },
+    });
+
+    const updateRecurring = useMutation({
+        mutationFn: async ({ recurringId, changes }: UpdateRecurringInput) => {
+            const response = await fetch(`/api/recurring/${recurringId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(changes),
+            });
+
+            const body = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(body?.error || 'Error al actualizar recurrencia');
+            return body as RecurringTransaction;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recurring'] });
+            toast.success('Regla recurrente actualizada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Error al actualizar recurrencia');
+        },
+    });
+
+    const deleteRecurring = useMutation({
+        mutationFn: async (recurringId: string) => {
+            const response = await fetch(`/api/recurring/${recurringId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+
+            const body = await response.json().catch(() => null);
+            if (!response.ok) throw new Error(body?.error || 'Error al eliminar recurrencia');
+            return body as { success: boolean; id: string };
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recurring'] });
+            toast.success('Regla recurrente eliminada');
+        },
+        onError: (error: any) => {
+            toast.error(error.message || 'Error al eliminar recurrencia');
         },
     });
 
@@ -115,9 +216,17 @@ export function usePlanning(month = currentMonth()) {
         recurringError: recurringQuery.error instanceof Error ? recurringQuery.error.message : null,
         addBudget: addBudget.mutateAsync,
         addRecurring: addRecurring.mutateAsync,
+        updateBudget: updateBudget.mutateAsync,
+        deleteBudget: deleteBudget.mutateAsync,
+        updateRecurring: updateRecurring.mutateAsync,
+        deleteRecurring: deleteRecurring.mutateAsync,
         runRecurring: runRecurring.mutateAsync,
         isRunningRecurring: runRecurring.isPending,
         isAddingBudget: addBudget.isPending,
         isAddingRecurring: addRecurring.isPending,
+        isUpdatingBudget: updateBudget.isPending,
+        isDeletingBudget: deleteBudget.isPending,
+        isUpdatingRecurring: updateRecurring.isPending,
+        isDeletingRecurring: deleteRecurring.isPending,
     };
 }

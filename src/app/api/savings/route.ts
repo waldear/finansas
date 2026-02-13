@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
-import { SavingsGoalSchema } from '@/lib/schemas';
+import { SavingsGoalInputSchema } from '@/lib/schemas';
 import { NextResponse } from 'next/server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await req.json();
-        const validatedData = SavingsGoalSchema.parse(body);
+        const validatedData = SavingsGoalInputSchema.parse(body);
         const { data, error } = await supabase
             .from('savings_goals')
             .insert([{ ...validatedData, user_id: session.user.id }])
@@ -76,11 +76,12 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const error = err as { errors?: unknown; message?: string };
         logError('savings_goal_create_exception', err, {
             ...context,
             durationMs: Date.now() - startedAt,
         });
-        return NextResponse.json({ error: err.errors || err.message }, { status: 400 });
+        return NextResponse.json({ error: error.errors || error.message || 'Datos inválidos' }, { status: 400 });
     }
 }

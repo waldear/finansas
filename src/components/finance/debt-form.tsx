@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { DebtSchema, Debt } from '@/lib/schemas';
+import { DebtInputSchema, DebtInput } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,8 @@ import { Loader2 } from 'lucide-react';
 export function DebtForm() {
     const { addDebt, isAddingDebt } = useFinance();
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<Debt>({
-        resolver: zodResolver(DebtSchema),
+    const { register, handleSubmit, reset, formState: { errors } } = useForm<DebtInput>({
+        resolver: zodResolver(DebtInputSchema),
         defaultValues: {
             remaining_installments: 0,
             total_installments: 1,
@@ -22,7 +22,7 @@ export function DebtForm() {
         }
     });
 
-    const onSubmit = async (data: Debt) => {
+    const onSubmit = async (data: DebtInput) => {
         try {
             await addDebt(data);
             reset({

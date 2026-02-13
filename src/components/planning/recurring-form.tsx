@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { RecurringTransaction, RecurringTransactionSchema } from '@/lib/schemas';
+import { RecurringTransactionInput, RecurringTransactionInputSchema } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,8 @@ import { usePlanning } from '@/hooks/use-planning';
 export function RecurringForm() {
     const { addRecurring, isAddingRecurring } = usePlanning();
 
-    const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<RecurringTransaction>({
-        resolver: zodResolver(RecurringTransactionSchema),
+    const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<RecurringTransactionInput>({
+        resolver: zodResolver(RecurringTransactionInputSchema),
         defaultValues: {
             type: 'expense',
             frequency: 'monthly',
@@ -24,7 +24,7 @@ export function RecurringForm() {
         },
     });
 
-    const onSubmit = async (data: RecurringTransaction) => {
+    const onSubmit = async (data: RecurringTransactionInput) => {
         try {
             await addRecurring({
                 ...data,
