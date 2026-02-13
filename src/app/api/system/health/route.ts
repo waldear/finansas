@@ -23,7 +23,9 @@ export async function GET() {
         const budgets = await supabase.from('budgets').select('*', { count: 'exact', head: true }).limit(1);
         const recurring = await supabase.from('recurring_transactions').select('*', { count: 'exact', head: true }).limit(1);
         const audit = await supabase.from('audit_events').select('*', { count: 'exact', head: true }).limit(1);
-        const bucket = await supabase.storage.getBucket('documents');
+        const bucketProbe = await supabase.storage
+            .from('documents')
+            .list('', { limit: 1 });
 
         logInfo('system_health_checked', {
             ...context,
@@ -42,7 +44,7 @@ export async function GET() {
                 budgets_table: !budgets.error,
                 recurring_table: !recurring.error,
                 audit_table: !audit.error,
-                storage_bucket: !bucket.error,
+                storage_bucket: !bucketProbe.error,
             },
             debug: {
                 obligations_error: obligations.error?.message || null,
@@ -51,7 +53,7 @@ export async function GET() {
                 budgets_error: budgets.error?.message || null,
                 recurring_error: recurring.error?.message || null,
                 audit_error: audit.error?.message || null,
-                storage_error: bucket.error?.message || null,
+                storage_error: bucketProbe.error?.message || null,
                 url: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 15) + "..."
             }
         });
