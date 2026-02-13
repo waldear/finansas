@@ -6,11 +6,22 @@ const extractionSchema = `
   "currency": string (e.g., "ARS", "USD"),
   "due_date": string (YYYY-MM-DD),
   "minimum_payment": number (nullable),
+  "period_label": string (nullable, e.g. "FEBRERO 2026"),
+  "raw_text": string (nullable, plain OCR text),
   "items": [
     {
       "description": string,
       "amount": number,
       "date": string (YYYY-MM-DD)
+    }
+  ],
+  "entries": [
+    {
+      "label": string,
+      "amount": number,
+      "currency": string ("ARS" | "USD"),
+      "kind": string ("income" | "expense" | "saving" | "debt" | "summary" | "other"),
+      "date": string (YYYY-MM-DD, nullable)
     }
   ],
   "type": string ("credit_card", "invoice", "bank_statement", "other"),
@@ -82,6 +93,44 @@ function parseExtraction(rawText: string) {
     }
 
     const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
+    const rawEntries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+
+    const normalizedEntries = rawEntries
+        .slice(0, 120)
+        .map((entry: any) => ({
+            label: typeof entry?.label === 'string' && entry.label.trim()
+                ? entry.label.trim()
+                : 'Concepto detectado',
+            amount: parseNumber(entry?.amount, 0),
+            currency: typeof entry?.currency === 'string' && entry.currency.trim()
+                ? entry.currency.trim().toUpperCase()
+                : 'ARS',
+            kind: typeof entry?.kind === 'string' && entry.kind.trim()
+                ? entry.kind.trim().toLowerCase()
+                : 'other',
+            date: entry?.date ? normalizeDate(entry.date) : null,
+        }))
+        .filter((entry: any) => entry.amount > 0);
+
+    const normalizedItems = rawItems
+        .slice(0, 20)
+        .map((item: any) => ({
+            description: typeof item?.description === 'string' && item.description.trim()
+                ? item.description.trim()
+                : 'Movimiento detectado',
+            amount: parseNumber(item?.amount, 0),
+            date: normalizeDate(item?.date),
+        }))
+        .filter((item: any) => item.amount > 0);
+
+    const derivedItems = normalizedEntries
+        .filter((entry: any) => !['summary'].includes(entry.kind))
+        .slice(0, 20)
+        .map((entry: any) => ({
+            description: entry.label,
+            amount: entry.amount,
+            date: entry.date || normalizeDate(undefined),
+        }));
 
     return {
         total_amount: parseNumber(parsed?.total_amount, 0),
@@ -90,16 +139,14 @@ function parseExtraction(rawText: string) {
             : 'ARS',
         due_date: normalizeDate(parsed?.due_date),
         minimum_payment: parsed?.minimum_payment == null ? null : parseNumber(parsed.minimum_payment, 0),
-        items: rawItems
-            .slice(0, 5)
-            .map((item: any) => ({
-                description: typeof item?.description === 'string' && item.description.trim()
-                    ? item.description.trim()
-                    : 'Movimiento detectado',
-                amount: parseNumber(item?.amount, 0),
-                date: normalizeDate(item?.date),
-            }))
-            .filter((item: any) => item.amount > 0),
+        period_label: typeof parsed?.period_label === 'string' && parsed.period_label.trim()
+            ? parsed.period_label.trim().slice(0, 80)
+            : null,
+        raw_text: typeof parsed?.raw_text === 'string' && parsed.raw_text.trim()
+            ? parsed.raw_text.trim().slice(0, 4000)
+            : null,
+        items: normalizedItems.length > 0 ? normalizedItems : derivedItems,
+        entries: normalizedEntries,
         type: VALID_DOCUMENT_TYPES.has(parsed?.type) ? parsed.type : 'other',
         merchant: typeof parsed?.merchant === 'string' && parsed.merchant.trim() ? parsed.merchant.trim() : null,
     };
@@ -119,7 +166,10 @@ export async function extractFinancialDocument(params: {
       ${extractionSchema}
 
       If a field is not found, use null.
-      For "items", extract the 5 largest transactions if there are many.
+      For "items", include up to 20 key movements.
+      For "entries", if the document is a table/spreadsheet/budget snapshot, extract each meaningful row (income/expense/saving/debt/summary).
+      Include "period_label" if available (for example, "FEBRERO 2026").
+      Include "raw_text" with compact OCR text when possible.
       Ensure the currency is correct (default to ARS if not specified but looks like Argentine Peso).
       Date format must be YYYY-MM-DD.
     `;

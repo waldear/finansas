@@ -77,6 +77,15 @@ type AssistantDocumentContext = {
     extraction: unknown;
 };
 
+type DocumentRegisterEntry = {
+    type: 'income' | 'expense';
+    amount: number;
+    description: string;
+    category: string;
+    date: string;
+    currency: 'ARS' | 'USD';
+};
+
 function sanitizeDocumentContext(raw: AssistantRequestPayload['documentContext']): AssistantDocumentContext | null {
     if (!raw || typeof raw !== 'object') return null;
 
@@ -244,6 +253,29 @@ function extractIsoDateFromText(rawMessage: string) {
         }
     }
 
+    const normalized = normalizeText(rawMessage);
+    const monthByName = [
+        { key: 'enero', month: 1 },
+        { key: 'febrero', month: 2 },
+        { key: 'marzo', month: 3 },
+        { key: 'abril', month: 4 },
+        { key: 'mayo', month: 5 },
+        { key: 'junio', month: 6 },
+        { key: 'julio', month: 7 },
+        { key: 'agosto', month: 8 },
+        { key: 'septiembre', month: 9 },
+        { key: 'setiembre', month: 9 },
+        { key: 'octubre', month: 10 },
+        { key: 'noviembre', month: 11 },
+        { key: 'diciembre', month: 12 },
+    ].find((item) => normalized.includes(item.key));
+
+    if (monthByName) {
+        const yearMatch = normalized.match(/\b(20\d{2})\b/);
+        const year = yearMatch?.[1] ? Number(yearMatch[1]) : new Date().getUTCFullYear();
+        return `${year}-${String(monthByName.month).padStart(2, '0')}-01`;
+    }
+
     return isoToday();
 }
 
@@ -408,6 +440,80 @@ function inferQuickAction(message: string): QuickAction | null {
     return null;
 }
 
+function shouldRegisterFromMessage(message: string) {
+    const normalized = normalizeText(message);
+    return /\b(registra|registrar|registralo|registralo|guardar|guarda|cargar|carga|anota|agrega|importa)\b/.test(normalized);
+}
+
+function parseDocumentEntriesForRegistration(message: string, extraction: any): DocumentRegisterEntry[] {
+    const baseDate = extractIsoDateFromText(`${message}\n${String(extraction?.period_label || '')}\n${String(extraction?.raw_text || '')}`);
+    const entries = Array.isArray(extraction?.entries)
+        ? extraction.entries
+        : Array.isArray(extraction?.items)
+            ? extraction.items
+            : [];
+
+    const rows: DocumentRegisterEntry[] = [];
+    const dedupe = new Set<string>();
+
+    for (const entry of entries) {
+        const labelRaw = typeof entry?.label === 'string'
+            ? entry.label
+            : typeof entry?.description === 'string'
+                ? entry.description
+                : '';
+        const label = labelRaw.trim();
+        if (!label) continue;
+
+        const normalizedLabel = normalizeText(label);
+        if (/^(total|diferencia|saldo|resumen)$/.test(normalizedLabel)) continue;
+        if (/(^|\s)(total|diferencia|saldo)\b/.test(normalizedLabel)) continue;
+
+        const amount = typeof entry?.amount === 'string'
+            ? parseLocalizedAmount(entry.amount) || 0
+            : parseNumber(entry?.amount);
+        if (!amount || amount <= 0) continue;
+
+        const currencyRaw = typeof entry?.currency === 'string' ? entry.currency.toUpperCase() : 'ARS';
+        const currency: 'ARS' | 'USD' = currencyRaw.includes('USD') ? 'USD' : 'ARS';
+        const kind = typeof entry?.kind === 'string' ? normalizeText(entry.kind) : '';
+
+        let type: 'income' | 'expense';
+        if (kind === 'income') {
+            type = 'income';
+        } else if (kind === 'expense' || kind === 'debt' || kind === 'saving') {
+            type = 'expense';
+        } else {
+            type = /\b(sueldo|salario|ingreso|extra|venta|cobro|deposito|deposito)\b/.test(normalizedLabel)
+                ? 'income'
+                : 'expense';
+        }
+
+        const category = /\b(ahorro|fondo)\b/.test(normalizedLabel)
+            ? 'Ahorro'
+            : categoryFromDescription(type, label);
+
+        const dateValue = typeof entry?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date)
+            ? entry.date
+            : baseDate;
+
+        const key = `${type}|${category}|${label}|${amount.toFixed(2)}|${dateValue}|${currency}`;
+        if (dedupe.has(key)) continue;
+        dedupe.add(key);
+
+        rows.push({
+            type,
+            amount: Number(amount.toFixed(2)),
+            description: label,
+            category,
+            date: dateValue,
+            currency,
+        });
+    }
+
+    return rows.slice(0, 120);
+}
+
 async function persistChatEvent(params: {
     supabase: SupabaseClient;
     userId: string;
@@ -532,6 +638,114 @@ async function convertUsdToArs(params: {
         taxesAppliedPercent: taxesPercent,
         cardBrand,
     };
+}
+
+async function applyDocumentQuickAction(params: {
+    supabase: SupabaseClient;
+    userId: string;
+    message: string;
+    documentContext: AssistantDocumentContext;
+}): Promise<AppliedAction[]> {
+    const { supabase, userId, message, documentContext } = params;
+    const extraction = (documentContext.extraction || {}) as any;
+    const entries = parseDocumentEntriesForRegistration(message, extraction);
+    if (!entries.length) return [];
+
+    const cardBrand = detectCardBrand(message);
+    const requiresUsdConversion = entries.some((entry) => entry.currency === 'USD');
+    const usdRateInfo = requiresUsdConversion
+        ? await convertUsdToArs({ usdAmount: 1, cardBrand })
+        : null;
+
+    const insertPayload: Array<{
+        user_id: string;
+        type: 'income' | 'expense';
+        amount: number;
+        category: string;
+        description: string;
+        date: string;
+    }> = [];
+
+    let convertedUsdCount = 0;
+    let convertedUsdTotal = 0;
+
+    for (const entry of entries) {
+        let amountArs = entry.amount;
+        let description = entry.description;
+
+        if (entry.currency === 'USD') {
+            const rate = usdRateInfo?.rateUsed || 0;
+            if (rate <= 0) continue;
+            amountArs = Number((entry.amount * rate).toFixed(2));
+            convertedUsdCount += 1;
+            convertedUsdTotal += entry.amount;
+
+            description = `${entry.description} | USD ${entry.amount.toFixed(2)} convertido a ARS (TC ${rate.toFixed(2)}${usdRateInfo?.taxesAppliedPercent ? `, imp. ${usdRateInfo.taxesAppliedPercent.toFixed(1)}%` : ''})`;
+        }
+
+        insertPayload.push({
+            user_id: userId,
+            type: entry.type,
+            amount: amountArs,
+            category: entry.category,
+            description,
+            date: entry.date,
+        });
+    }
+
+    if (!insertPayload.length) return [];
+
+    const { data: insertedRows, error } = await supabase
+        .from('transactions')
+        .insert(insertPayload)
+        .select('id, type, amount, category');
+
+    if (error || !insertedRows?.length) {
+        throw new Error(`No se pudieron registrar movimientos del documento: ${error?.message || 'sin detalles'}`);
+    }
+
+    const incomeTotal = insertedRows
+        .filter((row) => row.type === 'income')
+        .reduce((acc, row) => acc + parseNumber(row.amount), 0);
+    const expenseTotal = insertedRows
+        .filter((row) => row.type === 'expense')
+        .reduce((acc, row) => acc + parseNumber(row.amount), 0);
+
+    await recordAuditEvent({
+        supabase,
+        userId,
+        entityType: 'transaction_batch',
+        entityId: insertedRows[0].id,
+        action: 'system',
+        metadata: {
+            source: 'assistant_document_registration',
+            document_name: documentContext.sourceName,
+            total_inserted: insertedRows.length,
+            income_total: incomeTotal,
+            expense_total: expenseTotal,
+            usd_rows_converted: convertedUsdCount,
+            usd_total_original: Number(convertedUsdTotal.toFixed(2)),
+            fx_source: usdRateInfo?.source || null,
+            fx_rate: usdRateInfo?.rateUsed || null,
+            fx_taxes_percent: usdRateInfo?.taxesAppliedPercent || null,
+        },
+    });
+
+    const summaries: AppliedAction[] = [{
+        type: 'transaction',
+        id: insertedRows[0].id,
+        summary: `Se registraron ${insertedRows.length} movimientos del archivo (${insertedRows.filter((row) => row.type === 'income').length} ingresos y ${insertedRows.filter((row) => row.type === 'expense').length} gastos).`,
+    }];
+
+    if (convertedUsdCount > 0) {
+        summaries.push({
+            type: 'transaction',
+            id: insertedRows[0].id,
+            summary: `Conversión USD aplicada: ${convertedUsdCount} fila(s), total original USD ${convertedUsdTotal.toFixed(2)} usando TC ${usdRateInfo?.rateUsed?.toFixed(2) || 'N/A'}.`,
+        });
+    }
+
+    return summaries;
 }
 
 async function applyQuickAction(params: {
@@ -823,7 +1037,22 @@ export async function POST(req: Request) {
         }
 
         let actionsApplied: AppliedAction[] = [];
-        if (!documentContext) {
+        if (documentContext && shouldRegisterFromMessage(message)) {
+            try {
+                actionsApplied = await applyDocumentQuickAction({
+                    supabase,
+                    userId: user.id,
+                    message,
+                    documentContext,
+                });
+            } catch (error) {
+                logWarn('assistant_document_registration_failed', {
+                    ...logContext,
+                    userId: user.id,
+                    reason: error instanceof Error ? error.message : String(error),
+                });
+            }
+        } else if (!documentContext) {
             try {
                 actionsApplied = await applyQuickAction({
                     supabase,
