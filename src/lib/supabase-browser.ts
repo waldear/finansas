@@ -10,5 +10,10 @@ export function createClient() {
         return null as any;
     }
 
-    return createBrowserClient(url, key);
+    return createBrowserClient(url, key, {
+        auth: {
+            flowType: 'pkce',
+            detectSessionInUrl: true,
+        },
+    });
 }

@@ -15,6 +15,99 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Mail, Lock, UserPlus, LogIn, Wallet, Chrome } from 'lucide-react';
 import { toast } from 'sonner';
 
+function formatAuthErrorMessage(message?: string) {
+    if (!message) return 'Ocurrió un error de autenticación. Intenta nuevamente.';
+
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('invalid login credentials')) {
+        return 'Email o contraseña incorrectos.';
+    }
+
+    if (normalized.includes('email not confirmed')) {
+        return 'Debes confirmar tu email antes de ingresar.';
+    }
+
+    if (normalized.includes('user already registered')) {
+        return 'Este correo ya está registrado.';
+    }
+
+    if (normalized.includes('password should be at least')) {
+        return 'La contraseña debe tener al menos 8 caracteres.';
+    }
+
+    if (/leaked|breach|pwned|compromised|have i been pwned|hibp/.test(normalized)) {
+        return 'Esta contraseña aparece en una filtración pública. Elige otra.';
+    }
+
+    if (normalized.includes('for security purposes')) {
+        return 'Espera unos segundos antes de volver a intentarlo.';
+    }
+
+    if (normalized.includes('signup is disabled')) {
+        return 'El registro está deshabilitado temporalmente.';
+    }
+
+    if (normalized.includes('provider is not enabled')) {
+        return 'Google no está habilitado. Intenta con email y contraseña.';
+    }
+
+    return message;
+}
+
+type PasswordValidationResult = {
+    valid: boolean;
+    message?: string;
+};
+
+async function sha1Hex(value: string) {
+    const data = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest('SHA-1', data);
+    return Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+}
+
+async function validatePasswordNotLeaked(password: string): Promise<PasswordValidationResult> {
+    try {
+        if (typeof window === 'undefined' || !window.crypto?.subtle) {
+            return { valid: true };
+        }
+
+        const sha1 = await sha1Hex(password);
+        const response = await fetch('/api/auth/password-leak-check', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sha1 }),
+        });
+
+        if (!response.ok) {
+            return {
+                valid: false,
+                message: 'No se pudo validar la seguridad de la contraseña. Intenta de nuevo.',
+            };
+        }
+
+        const payload = await response.json() as { leaked?: boolean };
+        if (payload.leaked) {
+            return {
+                valid: false,
+                message: 'Esta contraseña aparece en una filtración pública. Elige otra.',
+            };
+        }
+
+        return { valid: true };
+    } catch {
+        return {
+            valid: false,
+            message: 'No se pudo validar la seguridad de la contraseña. Intenta de nuevo.',
+        };
+    }
+}
+
 export default function AuthPage() {
     const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
     const [email, setEmail] = useState('');
@@ -25,15 +118,28 @@ export default function AuthPage() {
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [loginMethod, setLoginMethod] = useState<'password' | 'magic-link'>('password');
-    const [nextPath, setNextPath] = useState('/dashboard');
 
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
 
     const buildCallbackUrl = () => {
-        const siteUrl = sanitizeEnv(process.env.NEXT_PUBLIC_SITE_URL);
-        const baseUrl = siteUrl || window.location.origin;
-        return `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+        const siteUrl = sanitizeEnv(process.env.NEXT_PUBLIC_SITE_URL)?.replace(/\/$/, '');
+        const runtimeOrigin = sanitizeEnv(window.location.origin)?.replace(/\/$/, '');
+        const isHttpUrl = (value: string | undefined) => Boolean(value && /^https?:\/\//.test(value));
+
+        if (isHttpUrl(runtimeOrigin) && !runtimeOrigin!.includes('localhost')) {
+            return `${runtimeOrigin}/auth/callback`;
+        }
+
+        if (isHttpUrl(siteUrl)) {
+            return `${siteUrl}/auth/callback`;
+        }
+
+        if (isHttpUrl(runtimeOrigin)) {
+            return `${runtimeOrigin}/auth/callback`;
+        }
+
+        return '/auth/callback';
     };
 
     useEffect(() => {
@@ -49,12 +155,6 @@ export default function AuthPage() {
         checkExistingSession();
     }, [router, supabase]);
 
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const requestedNext = params.get('next') || '/dashboard';
-        setNextPath(requestedNext.startsWith('/') ? requestedNext : '/dashboard');
-    }, []);
-
     const normalizeEmail = () => email.trim().toLowerCase();
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -68,7 +168,7 @@ export default function AuthPage() {
         });
 
         if (error) {
-            setError(error.message || 'Email o contraseña incorrectos');
+            setError(formatAuthErrorMessage(error.message));
         } else {
             toast.success('Sesión iniciada correctamente');
             router.push('/dashboard');
@@ -98,7 +198,7 @@ export default function AuthPage() {
         });
 
         if (error) {
-            setError(error.message);
+            setError(formatAuthErrorMessage(error.message));
         } else {
             setSuccessMessage('¡Enlace enviado! Revisa tu bandeja de entrada.');
             setEmail('');
@@ -117,12 +217,18 @@ export default function AuthPage() {
             return;
         }
 
-        if (password.length < 6) {
-            setError('La contraseña debe tener al menos 6 caracteres');
+        if (password.length < 8) {
+            setError('La contraseña debe tener al menos 8 caracteres');
             return;
         }
 
         setIsLoading(true);
+        const passwordValidation = await validatePasswordNotLeaked(password);
+        if (!passwordValidation.valid) {
+            setError(passwordValidation.message || 'Contraseña insegura.');
+            setIsLoading(false);
+            return;
+        }
 
         const { error } = await supabase.auth.signUp({
             email: normalizeEmail(),
@@ -133,7 +239,7 @@ export default function AuthPage() {
         });
 
         if (error) {
-            setError(error.message);
+            setError(formatAuthErrorMessage(error.message));
         } else {
             setSuccessMessage('Cuenta creada. Revisa tu email para confirmar.');
             setEmail('');
@@ -156,7 +262,7 @@ export default function AuthPage() {
         });
 
         if (error) {
-            setError(error.message);
+            setError(formatAuthErrorMessage(error.message));
         } else {
             toast.success('Email de recuperación enviado');
         }
@@ -189,7 +295,7 @@ export default function AuthPage() {
         });
 
         if (error) {
-            setError(error.message);
+            setError(formatAuthErrorMessage(error.message));
         }
         setIsGoogleLoading(false);
     };
@@ -380,14 +486,14 @@ export default function AuthPage() {
                                     <Label htmlFor="register-password">Contraseña</Label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            id="register-password"
-                                            type="password"
-                                            placeholder="Mínimo 6 caracteres"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="pl-10"
-                                            required
+                                                <Input
+                                                    id="register-password"
+                                                    type="password"
+                                                    placeholder="Mínimo 8 caracteres"
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    className="pl-10"
+                                                    required
                                         />
                                     </div>
                                 </div>
