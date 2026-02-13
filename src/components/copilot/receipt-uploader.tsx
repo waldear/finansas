@@ -73,8 +73,16 @@ export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al procesar el documento');
+                const errorData = await response.json().catch(() => null);
+                const composedMessage = [
+                    errorData?.error,
+                    errorData?.details,
+                    errorData?.hint,
+                ]
+                    .filter(Boolean)
+                    .join(' · ');
+
+                throw new Error(composedMessage || 'Error al procesar el documento');
             }
 
             const result = await response.json();

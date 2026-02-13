@@ -68,6 +68,7 @@ export async function POST(req: Request) {
                     warning: `Se analizó el archivo sin Storage (${uploadError.message}).`,
                 });
             } catch (inlineError) {
+                const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
                 logError('document_upload_and_inline_extraction_failed', inlineError, {
                     ...context,
                     userId: user.id,
@@ -76,8 +77,8 @@ export async function POST(req: Request) {
                 return NextResponse.json(
                     {
                         error: 'No se pudo procesar el documento.',
-                        details: `Storage: ${uploadError.message}`,
-                        hint: 'Revisa bucket/policies de documents y GEMINI_API_KEY.',
+                        details: `Storage: ${uploadError.message} | IA: ${inlineMessage}`,
+                        hint: 'Revisa bucket/policies de documents, GEMINI_API_KEY y GEMINI_MODEL (recomendado: gemini-2.5-flash).',
                     },
                     { status: 500 }
                 );
@@ -110,6 +111,7 @@ export async function POST(req: Request) {
                     warning: `Se analizó el archivo sin cola asíncrona (${jobError.message}).`,
                 });
             } catch (inlineError) {
+                const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
                 logError('document_job_create_and_inline_extraction_failed', inlineError, {
                     ...context,
                     userId: user.id,
@@ -118,8 +120,8 @@ export async function POST(req: Request) {
                 return NextResponse.json(
                     {
                         error: 'No se pudo crear el job ni procesar en modo directo.',
-                        details: jobError.message,
-                        hint: 'Ejecuta supabase-advanced.sql para habilitar la cola document_jobs.',
+                        details: `Job: ${jobError.message} | IA: ${inlineMessage}`,
+                        hint: 'Revisa políticas de document_jobs y GEMINI_MODEL (recomendado: gemini-2.5-flash).',
                     },
                     { status: 500 }
                 );

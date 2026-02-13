@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateGeminiContentWithFallback } from './gemini';
 
 const extractionSchema = `
 {
@@ -112,15 +112,6 @@ export async function extractFinancialDocument(params: {
 }) {
     const { apiKey, mimeType, base64Data } = params;
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-        },
-    });
-
     const prompt = `
       You are a financial data extraction expert.
       Analyze this document (image or PDF) and extract the key financial information.
@@ -133,16 +124,27 @@ export async function extractFinancialDocument(params: {
       Date format must be YYYY-MM-DD.
     `;
 
-    const result = await model.generateContent([
-        prompt,
-        {
-            inlineData: {
-                data: base64Data,
-                mimeType,
-            },
+    const { text, modelName } = await generateGeminiContentWithFallback({
+        apiKey,
+        generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
         },
-    ]);
+        request: [
+            prompt,
+            {
+                inlineData: {
+                    data: base64Data,
+                    mimeType,
+                },
+            },
+        ],
+    });
 
-    const response = await result.response;
-    return parseExtraction(response.text());
+    try {
+        return parseExtraction(text);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`No se pudo interpretar la respuesta del modelo (${modelName}): ${message}`);
+    }
 }

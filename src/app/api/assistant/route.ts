@@ -1,8 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 import { sanitizeEnv } from '@/lib/utils';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { generateGeminiContentWithFallback } from '@/lib/gemini';
 
 export async function POST(req: Request) {
   const logContext = createRequestContext('/api/assistant', 'POST');
@@ -23,9 +23,6 @@ export async function POST(req: Request) {
 
   try {
     const { message, context } = await req.json();
-
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const systemPrompt = `
       Eres FinFlow AI, un auditor financiero personal inteligente y autónomo.
@@ -55,13 +52,15 @@ export async function POST(req: Request) {
       Respuesta (Markdown, breve y accionable):
     `;
 
-    const result = await model.generateContent(systemPrompt);
-    const response = await result.response;
-    const text = response.text();
+    const { text, modelName } = await generateGeminiContentWithFallback({
+      apiKey: geminiApiKey,
+      request: systemPrompt,
+    });
 
     logInfo('assistant_response_generated', {
       ...logContext,
       userId: user.id,
+      model: modelName,
       messageLength: typeof message === 'string' ? message.length : 0,
       transactionsInContext: Array.isArray(context?.transactions) ? context.transactions.length : 0,
       durationMs: Date.now() - startedAt,
