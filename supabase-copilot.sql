@@ -81,7 +81,10 @@ create policy "Users can insert their own obligations" on obligations
   for insert with check (auth.uid() = user_id);
 
 create policy "Users can update their own obligations" on obligations
-  for update using (auth.uid() = user_id);
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users can delete their own obligations" on obligations
+  for delete using (auth.uid() = user_id);
 
 create policy "Users can view their own recommendations" on recommendations
   for select using (auth.uid() = user_id);
