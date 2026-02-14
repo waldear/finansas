@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,22 @@ import { Progress } from '@/components/ui/progress';
 
 interface ReceiptUploaderProps {
     onUploadComplete: (data: any) => void;
+    prefillFile?: File | null;
 }
 
-export function ReceiptUploader({ onUploadComplete }: ReceiptUploaderProps) {
+export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUploaderProps) {
     const [file, setFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const lastPrefillKeyRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!prefillFile) return;
+        const key = `${prefillFile.name}|${prefillFile.size}|${prefillFile.lastModified}`;
+        if (lastPrefillKeyRef.current === key) return;
+        lastPrefillKeyRef.current = key;
+        setFile(prefillFile);
+    }, [prefillFile]);
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
         if (acceptedFiles.length > 0) {

@@ -1,16 +1,18 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { ReceiptUploader } from '@/components/copilot/receipt-uploader';
 import { ExtractionVerifier } from '@/components/copilot/extraction-verifier';
 import { WeeklyPlan } from '@/components/copilot/weekly-plan';
 import { SetupCheck } from '@/components/copilot/setup-check';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Brain } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
 
 type CopilotStep = 'upload' | 'verify' | 'success';
 
@@ -20,14 +22,42 @@ function toSafeNumber(value: unknown) {
 }
 
 export default function CopilotPage() {
+    const router = useRouter();
     const queryClient = useQueryClient();
+    const { consumePendingFile, setPendingDocumentContext } = useAssistantAttachment();
     const [isReady, setIsReady] = useState(false);
     const [step, setStep] = useState<CopilotStep>('upload');
     const [extractedData, setExtractedData] = useState<any>(null);
+    const [prefillFile, setPrefillFile] = useState<File | null>(null);
+
+    useEffect(() => {
+        const file = consumePendingFile();
+        if (file) {
+            setPrefillFile(file);
+        }
+    }, [consumePendingFile]);
 
     const handleExtractionComplete = (data: any) => {
         setExtractedData(data);
         setStep('verify');
+    };
+
+    const handleAnalyzeWithAssistant = () => {
+        if (!extractedData) {
+            toast.info('Primero procesá un documento.');
+            return;
+        }
+
+        setPendingDocumentContext({
+            sourceName: typeof extractedData?.merchant === 'string' && extractedData.merchant.trim()
+                ? extractedData.merchant.trim()
+                : 'Documento',
+            mimeType: 'application/pdf',
+            sizeBytes: 0,
+            extraction: extractedData,
+        });
+
+        router.push('/dashboard/assistant');
     };
 
     const handleVerificationConfirm = async (formData: any) => {
@@ -83,6 +113,7 @@ export default function CopilotPage() {
     const handleReset = () => {
         setStep('upload');
         setExtractedData(null);
+        setPrefillFile(null);
     };
 
     if (!isReady) {
@@ -115,12 +146,23 @@ export default function CopilotPage() {
             <div className="mt-8 transition-all duration-500 ease-in-out">
                 {step === 'upload' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <ReceiptUploader onUploadComplete={handleExtractionComplete} />
+                        <ReceiptUploader onUploadComplete={handleExtractionComplete} prefillFile={prefillFile} />
                     </div>
                 )}
 
                 {step === 'verify' && extractedData && (
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500">
+                        <div className="mb-3 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={handleAnalyzeWithAssistant}
+                                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+                                title="Abrir el Asistente con este documento"
+                            >
+                                <Brain className="h-4 w-4" />
+                                Analizar con asistente
+                            </button>
+                        </div>
                         <ExtractionVerifier
                             data={extractedData}
                             onConfirm={handleVerificationConfirm}
@@ -139,6 +181,15 @@ export default function CopilotPage() {
                             <p className="text-muted-foreground">
                                 Hemos añadido esta obligación a tu lista. Tu plan financiero se está actualizando...
                             </p>
+                            <button
+                                type="button"
+                                onClick={handleAnalyzeWithAssistant}
+                                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+                                title="Abrir el Asistente con este documento"
+                            >
+                                <Brain className="h-4 w-4" />
+                                Analizar con asistente
+                            </button>
                             <button
                                 onClick={handleReset}
                                 className="inline-flex items-center text-primary font-medium hover:underline mt-4"

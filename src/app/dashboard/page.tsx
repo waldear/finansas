@@ -177,7 +177,7 @@ export default function DashboardPage() {
 
         setPendingFile(file);
         event.target.value = '';
-        router.push('/dashboard/assistant');
+        router.push('/dashboard/copilot');
     };
 
     const actionButtons = [

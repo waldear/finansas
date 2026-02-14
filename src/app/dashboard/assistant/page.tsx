@@ -1,20 +1,17 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Brain, Crown, FileImage, FileText, Loader2, Paperclip, Send, Trash2, X } from 'lucide-react';
+import { Brain, Crown, FileText, Loader2, Send, Trash2, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
 import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
-import {
-    MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES,
-    SUPPORTED_ASSISTANT_ATTACHMENT_TYPES,
-} from '@/lib/assistant-attachments';
 
 type AssistantDocumentContext = {
     sourceName: string;
@@ -86,13 +83,11 @@ type ManualStatementForm = {
 
 export default function AssistantPage() {
     const queryClient = useQueryClient();
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const { consumePendingFile } = useAssistantAttachment();
+    const { consumePendingDocumentContext } = useAssistantAttachment();
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [input, setInput] = useState('');
-    const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [documentContext, setDocumentContext] = useState<AssistantDocumentContext | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
     const [billing, setBilling] = useState<AssistantBilling | null>(null);
     const [isStartingCheckout, setIsStartingCheckout] = useState(false);
@@ -118,11 +113,11 @@ export default function AssistantPage() {
         paymentDescription: '',
     }));
 
-    const attachmentPrompts = [
-        { label: 'Resumir', prompt: 'Resumí el documento adjunto en puntos clave y una conclusión.' },
-        { label: 'Gastos y categorías', prompt: 'Del documento adjunto, detectá los gastos principales, categorizalos y sugerí 3 recortes.' },
-        { label: 'Vencimientos', prompt: 'Del documento adjunto, identificá vencimientos, cuotas o suscripciones y recomendame recordatorios.' },
-        { label: 'Movimientos raros', prompt: 'Revisá el documento adjunto y marcá movimientos raros, duplicados o inconsistencias.' },
+    const documentPrompts = [
+        { label: 'Resumir', prompt: 'Resumí el documento en puntos clave y una conclusión.' },
+        { label: 'Gastos y categorías', prompt: 'Del documento, detectá los gastos principales, categorizalos y sugerí 3 recortes.' },
+        { label: 'Vencimientos', prompt: 'Del documento, identificá vencimientos, cuotas o suscripciones y recomendame recordatorios.' },
+        { label: 'Movimientos raros', prompt: 'Revisá el documento y marcá movimientos raros, duplicados o inconsistencias.' },
     ];
 
     const importTotals = useMemo(() => {
@@ -199,27 +194,21 @@ export default function AssistantPage() {
     }, [loadBilling]);
 
     useEffect(() => {
-        const pending = consumePendingFile();
+        const pending = consumePendingDocumentContext();
         if (!pending) return;
-
-        if (!SUPPORTED_ASSISTANT_ATTACHMENT_TYPES.has(pending.type)) {
-            toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
-            return;
-        }
-
-        if (pending.size > MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES) {
-            toast.error('El archivo supera 10MB. Sube uno más liviano.');
-            return;
-        }
-
-        setAttachedFile(pending);
-    }, [consumePendingFile]);
+        setDocumentContext({
+            sourceName: pending.sourceName,
+            mimeType: pending.mimeType,
+            sizeBytes: pending.sizeBytes,
+            extraction: pending.extraction,
+        });
+    }, [consumePendingDocumentContext]);
 
     useEffect(() => {
-        // Reset any pending import preview when changing/clearing the attachment.
+        // Reset any pending import preview when changing/clearing the document context.
         setImportPreviewRows(null);
         setImportPreviewMeta(null);
-    }, [attachedFile?.name, attachedFile?.size, attachedFile?.type]);
+    }, [documentContext?.sourceName, documentContext?.mimeType, documentContext?.sizeBytes]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -297,123 +286,14 @@ export default function AssistantPage() {
         }
     };
 
-    const processAttachedDocument = async (file: File): Promise<AssistantDocumentContext> => {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const enqueueResponse = await fetch('/api/documents/process', {
-            method: 'POST',
-            credentials: 'include',
-            body: formData,
-        });
-
-        const enqueueBody = await enqueueResponse.json().catch(() => null);
-        if (!enqueueResponse.ok) {
-            const composedError = [enqueueBody?.error, enqueueBody?.details, enqueueBody?.hint]
-                .filter(Boolean)
-                .join(' · ');
-            throw new Error(composedError || 'No se pudo procesar el archivo adjunto.');
-        }
-
-        if (enqueueBody?.warning) {
-            toast.warning(enqueueBody.warning);
-        }
-
-        if (!enqueueBody?.jobId) {
-            if (!enqueueBody?.data) {
-                throw new Error('No se obtuvo extracción del archivo adjunto.');
-            }
-            return {
-                sourceName: file.name,
-                mimeType: file.type,
-                sizeBytes: file.size,
-                extraction: enqueueBody.data,
-            };
-        }
-
-        const runResponse = await fetch(`/api/documents/jobs/${enqueueBody.jobId}/run`, {
-            method: 'POST',
-            credentials: 'include',
-        });
-
-        const runBody = await runResponse.json().catch(() => null);
-        if (!runResponse.ok) {
-            const composedError = [runBody?.error, runBody?.details, runBody?.hint]
-                .filter(Boolean)
-                .join(' · ');
-            throw new Error(composedError || 'No se pudo iniciar el análisis del documento.');
-        }
-
-        if (runBody?.status === 'completed' && runBody?.data) {
-            if (runBody?.warning) {
-                toast.warning(runBody.warning);
-            }
-            return {
-                sourceName: file.name,
-                mimeType: file.type,
-                sizeBytes: file.size,
-                extraction: runBody.data,
-            };
-        }
-
-        for (let attempt = 0; attempt < 45; attempt++) {
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            const statusResponse = await fetch(`/api/documents/jobs/${enqueueBody.jobId}`, {
-                credentials: 'include',
-            });
-            const statusBody = await statusResponse.json().catch(() => null);
-
-            if (!statusResponse.ok) {
-                throw new Error(statusBody?.error || 'No se pudo consultar el estado del documento.');
-            }
-
-            if (statusBody?.status === 'completed') {
-                if (statusBody?.warning) {
-                    toast.warning(statusBody.warning);
-                }
-                return {
-                    sourceName: file.name,
-                    mimeType: file.type,
-                    sizeBytes: file.size,
-                    extraction: statusBody?.data,
-                };
-            }
-
-            if (statusBody?.status === 'failed') {
-                throw new Error(statusBody?.error || 'El análisis del adjunto falló.');
-            }
-        }
-
-        throw new Error('El análisis del adjunto tardó demasiado. Inténtalo nuevamente.');
-    };
-
-    const handleAttachmentSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!SUPPORTED_ASSISTANT_ATTACHMENT_TYPES.has(file.type)) {
-            toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
-            event.target.value = '';
-            return;
-        }
-
-        if (file.size > MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES) {
-            toast.error('El archivo supera 10MB. Sube uno más liviano.');
-            event.target.value = '';
-            return;
-        }
-
-        setAttachedFile(file);
-        event.target.value = '';
-    };
-
     const handlePrepareImport = async () => {
-        if (!attachedFile) return;
+        if (!documentContext) {
+            toast.info('Primero procesá un documento en Copilot.');
+            return;
+        }
 
         setIsPreparingImport(true);
         try {
-            setIsProcessingAttachment(true);
-            const documentContext = await processAttachedDocument(attachedFile);
             const response = await fetch('/api/transactions/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -432,7 +312,7 @@ export default function AssistantPage() {
             const rows = Array.isArray(payload?.rows) ? payload.rows : [];
             if (!rows.length) {
                 const warning = Array.isArray(payload?.warnings) ? payload.warnings[0] : null;
-                toast.info(warning || 'No se detectaron movimientos en el adjunto.');
+                toast.info(warning || 'No se detectaron movimientos en el documento.');
                 setImportPreviewRows([]);
                 setImportPreviewMeta(payload?.meta ?? null);
                 return;
@@ -456,7 +336,6 @@ export default function AssistantPage() {
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'No se pudo preparar la importación.');
         } finally {
-            setIsProcessingAttachment(false);
             setIsPreparingImport(false);
         }
     };
@@ -519,12 +398,11 @@ export default function AssistantPage() {
             ]);
 
             cancelImportPreview();
-            setAttachedFile(null);
             setMessages((prev) => [
                 ...prev,
                 {
                     role: 'assistant',
-                    content: `Listo. Importé ${payload?.imported ?? rows.length} movimientos desde tu adjunto.`,
+                    content: `Listo. Importé ${payload?.imported ?? rows.length} movimientos desde tu documento.`,
                 },
             ]);
             toast.success(`Importación lista: ${payload?.imported ?? rows.length} movimientos cargados${payload?.skipped ? `, ${payload.skipped} omitidos` : ''}.`);
@@ -659,35 +537,27 @@ export default function AssistantPage() {
 
     const handleSend = async (forcedMessage?: string) => {
         const userMessage = (forcedMessage ?? input).trim();
-        const fileToAnalyze = attachedFile;
-        if (!userMessage && !fileToAnalyze) return;
+        const messageToSend = userMessage || (documentContext ? `Analiza este documento (${documentContext.sourceName}) y dame conclusiones.` : '');
+        if (!messageToSend) return;
 
         setInput('');
-        setAttachedFile(null);
         setMessages((prev) => [
             ...prev,
             {
                 role: 'user',
-                content: userMessage || `Adjunté ${fileToAnalyze?.name}. Analízalo y recomiéndame acciones.`,
+                content: userMessage || (documentContext ? `Analizar documento: ${documentContext.sourceName}` : messageToSend),
             },
         ]);
         setIsLoading(true);
 
         try {
-            let documentContext: AssistantDocumentContext | undefined;
-            if (fileToAnalyze) {
-                setIsProcessingAttachment(true);
-                documentContext = await processAttachedDocument(fileToAnalyze);
-                toast.success('Adjunto procesado. Generando recomendaciones...');
-            }
-
             const res = await fetch('/api/assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
-                    message: userMessage || `Analiza este documento (${fileToAnalyze?.name}) y dame conclusiones.`,
-                    documentContext,
+                    message: messageToSend,
+                    documentContext: documentContext ?? undefined,
                 }),
             });
 
@@ -713,12 +583,8 @@ export default function AssistantPage() {
         } catch (error) {
             const message = error instanceof Error ? error.message : 'No se pudo procesar tu solicitud.';
             setMessages(prev => [...prev, { role: 'assistant', content: `Lo siento, hubo un error: ${message}`.slice(0, 420) }]);
-            if (fileToAnalyze) {
-                setAttachedFile(fileToAnalyze);
-            }
             toast.error(message);
         } finally {
-            setIsProcessingAttachment(false);
             setIsLoading(false);
         }
     };
@@ -847,7 +713,7 @@ export default function AssistantPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setIsManualStatementOpen((prev) => !prev)}
-                                    disabled={isSavingManualStatement || isLoading || isProcessingAttachment || isImporting}
+                                    disabled={isSavingManualStatement || isLoading || isImporting}
                                 >
                                     {isManualStatementOpen ? 'Cerrar' : 'Cargar resumen'}
                                 </Button>
@@ -987,7 +853,7 @@ export default function AssistantPage() {
                                             type="button"
                                             size="sm"
                                             onClick={handleSaveManualStatement}
-                                            disabled={isSavingManualStatement || isLoading || isProcessingAttachment}
+                                            disabled={isSavingManualStatement || isLoading || isImporting}
                                         >
                                             {isSavingManualStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                             Guardar resumen
@@ -997,63 +863,82 @@ export default function AssistantPage() {
                             )}
                         </div>
 
-                        {attachedFile && (
-                            <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-xs">
-                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                    {attachedFile.type.startsWith('image/') ? (
-                                        <FileImage className="h-4 w-4 shrink-0 text-primary" />
-                                    ) : (
-                                        <FileText className="h-4 w-4 shrink-0 text-primary" />
-                                    )}
-                                    <span className="truncate">{attachedFile.name}</span>
-                                    <span className="text-muted-foreground">({formatFileSize(attachedFile.size)})</span>
+                        {!documentContext && (
+                            <div className="rounded-lg border bg-muted/10 px-3 py-2 text-xs">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold">Adjuntos</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Para adjuntar PDFs o fotos usá Copilot. Luego podés analizarlos acá.
+                                        </p>
+                                    </div>
+                                    <Button asChild type="button" variant="outline" size="sm" disabled={isLoading || isImporting}>
+                                        <Link href="/dashboard/copilot">Abrir Copilot</Link>
+                                    </Button>
                                 </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => setAttachedFile(null)}
-                                    disabled={isLoading || isProcessingAttachment}
-                                    title="Quitar archivo adjunto"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </Button>
                             </div>
                         )}
 
-                        {attachedFile && (
-                            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-                                <p className="font-medium">¿Qué querés hacer con el adjunto?</p>
-                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
-                                        onClick={handlePrepareImport}
-                                        disabled={isLoading || isProcessingAttachment || isPreparingImport || isImporting}
-                                    >
-                                        {isPreparingImport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        Importar movimientos (preview)
-                                    </Button>
-                                    {attachmentPrompts.map((item) => (
+                        {documentContext && (
+                            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs space-y-2">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                                        <FileText className="h-4 w-4 shrink-0 text-primary" />
+                                        <span className="truncate">{documentContext.sourceName || 'Documento'}</span>
+                                        {documentContext.sizeBytes > 0 ? (
+                                            <span className="text-muted-foreground">({formatFileSize(documentContext.sizeBytes)})</span>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <Button asChild type="button" variant="outline" size="sm" className="h-8" disabled={isLoading || isImporting}>
+                                            <Link href="/dashboard/copilot">Cambiar</Link>
+                                        </Button>
                                         <Button
-                                            key={item.label}
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => setDocumentContext(null)}
+                                            disabled={isLoading || isImporting || isPreparingImport}
+                                            title="Quitar documento"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="font-medium">¿Qué querés hacer con el documento?</p>
+                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                        <Button
                                             type="button"
                                             variant="outline"
                                             size="sm"
                                             className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
-                                            onClick={() => handleSend(item.prompt)}
-                                            disabled={isLoading || isProcessingAttachment || isPreparingImport || isImporting}
+                                            onClick={handlePrepareImport}
+                                            disabled={isLoading || isPreparingImport || isImporting}
                                         >
-                                            {item.label}
+                                            {isPreparingImport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Importar movimientos (preview)
                                         </Button>
-                                    ))}
+                                        {documentPrompts.map((item) => (
+                                            <Button
+                                                key={item.label}
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
+                                                onClick={() => handleSend(item.prompt)}
+                                                disabled={isLoading || isPreparingImport || isImporting}
+                                            >
+                                                {item.label}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                        Privacidad: para resúmenes de tarjeta, usa Modo privado. Para adjuntos, Copilot procesa y luego el Asistente interpreta.
+                                    </p>
                                 </div>
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                    Privacidad: el archivo se sube y analiza solo cuando eliges una acción. Para resúmenes de tarjeta, puedes usar Modo privado.
-                                </p>
                             </div>
                         )}
 
@@ -1073,7 +958,7 @@ export default function AssistantPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={cancelImportPreview}
-                                            disabled={isImporting || isLoading || isProcessingAttachment}
+                                            disabled={isImporting || isLoading || isPreparingImport}
                                         >
                                             Cancelar
                                         </Button>
@@ -1081,7 +966,7 @@ export default function AssistantPage() {
                                             type="button"
                                             size="sm"
                                             onClick={confirmImport}
-                                            disabled={isImporting || isLoading || isProcessingAttachment || importPreviewRows.length === 0}
+                                            disabled={isImporting || isLoading || isPreparingImport || importPreviewRows.length === 0}
                                         >
                                             {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                             Importar {importPreviewRows.length}
@@ -1097,13 +982,13 @@ export default function AssistantPage() {
                                                     type="date"
                                                     value={row.date}
                                                     onChange={(event) => updateImportRow(row.id, { date: event.target.value })}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     className="h-9"
                                                 />
                                                 <select
                                                     value={row.type}
                                                     onChange={(event) => updateImportRow(row.id, { type: event.target.value === 'income' ? 'income' : 'expense' })}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     className="h-9 rounded-md border border-input bg-background px-3 text-xs"
                                                 >
                                                     <option value="expense">Gasto</option>
@@ -1112,14 +997,14 @@ export default function AssistantPage() {
                                                 <Input
                                                     value={row.description}
                                                     onChange={(event) => updateImportRow(row.id, { description: event.target.value })}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     className="h-9"
                                                     placeholder="Descripción"
                                                 />
                                                 <Input
                                                     value={row.category}
                                                     onChange={(event) => updateImportRow(row.id, { category: event.target.value })}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     className="h-9"
                                                     placeholder="Categoría"
                                                 />
@@ -1129,7 +1014,7 @@ export default function AssistantPage() {
                                                     step="0.01"
                                                     value={Number.isFinite(Number(row.amount)) ? String(row.amount) : ''}
                                                     onChange={(event) => updateImportRow(row.id, { amount: Number(event.target.value || 0) })}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     className="h-9"
                                                     placeholder="Monto"
                                                 />
@@ -1139,7 +1024,7 @@ export default function AssistantPage() {
                                                     size="icon"
                                                     className="h-9 w-9"
                                                     onClick={() => removeImportRow(row.id)}
-                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    disabled={isImporting || isLoading}
                                                     title="Quitar fila"
                                                 >
                                                     <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -1152,34 +1037,15 @@ export default function AssistantPage() {
                         )}
 
                         <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png,.webp"
-                                onChange={handleAttachmentSelection}
-                                className="hidden"
-                                title="Seleccionar archivo"
-                            />
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-11 w-11 shrink-0"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={isLoading || isProcessingAttachment}
-                                title="Adjuntar resumen o imagen"
-                            >
-                                <Paperclip className="h-4 w-4" />
-                            </Button>
                             <Input
                                 placeholder="Pregúntame sobre tus gastos, deudas o consejos de ahorro..."
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                disabled={isLoading || isProcessingAttachment}
+                                disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement}
                                 className="h-11 min-w-0 flex-1 basis-[12rem]"
                             />
-                            <Button type="submit" size="icon" disabled={isLoading || isProcessingAttachment} className="h-11 w-11" title="Enviar mensaje">
-                                {(isLoading || isProcessingAttachment) ? (
+                            <Button type="submit" size="icon" disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement} className="h-11 w-11" title="Enviar mensaje">
+                                {isLoading ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                     <Send className="h-4 w-4" />
