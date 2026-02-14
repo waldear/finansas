@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,7 +32,13 @@ function parseMoney(value: unknown) {
             normalized = stripped.replace(/,/g, '');
         }
     } else if (hasComma) {
-        normalized = stripped.replace(',', '.');
+        // AR-style decimals: "1.234,56" (thousands "." + decimal ",")
+        normalized = stripped.replace(/\./g, '').replace(',', '.');
+    } else if (hasDot) {
+        // If the value looks like thousands separators ("1.234.567"), strip dots.
+        if (/^-?\d{1,3}(\.\d{3})+$/.test(stripped)) {
+            normalized = stripped.replace(/\./g, '');
+        }
     }
 
     const parsed = Number(normalized);
@@ -56,6 +63,11 @@ const verificationSchema = z.object({
     ),
     mark_paid: z.boolean().default(false),
     payment_date: z.string().optional(),
+    payment_amount: z.preprocess(
+        (value) => parseMoney(value),
+        z.number({ invalid_type_error: 'Ingresa un monto válido' }).positive().optional()
+    ),
+    payment_description: z.string().optional(),
 }).superRefine((values, ctx) => {
     if (values.mark_paid && !values.payment_date) {
         ctx.addIssue({
@@ -100,18 +112,32 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
         title: defaultTitle,
         amount: typeof data?.total_amount === 'number' && data.total_amount > 0 ? data.total_amount : undefined,
         due_date: data.due_date || new Date().toISOString().split('T')[0],
-        category: 'Varios', // Default
+        category: data?.type === 'credit_card' ? 'Tarjeta' : data?.type === 'invoice' ? 'Servicios' : 'Varios',
         minimum_payment: typeof data?.minimum_payment === 'number' && data.minimum_payment > 0 ? data.minimum_payment : undefined,
         mark_paid: false,
         payment_date: new Date().toISOString().split('T')[0],
+        payment_amount: undefined,
+        payment_description: '',
     };
 
-    const { register, watch, handleSubmit, formState: { errors } } = useForm<VerificationFormValues>({
+    const { register, watch, setValue, handleSubmit, formState: { errors } } = useForm<VerificationFormValues>({
         resolver: zodResolver(verificationSchema),
         defaultValues
     });
 
     const markPaid = watch('mark_paid');
+    const observedAmount = watch('amount');
+    const observedMinimum = watch('minimum_payment');
+    const observedPaymentAmount = watch('payment_amount');
+
+    useEffect(() => {
+        if (!markPaid) return;
+        if (observedPaymentAmount != null && Number(observedPaymentAmount) > 0) return;
+        const fallback = Number(observedMinimum || 0) > 0 ? Number(observedMinimum) : Number(observedAmount || 0);
+        if (fallback > 0) {
+            setValue('payment_amount', fallback);
+        }
+    }, [markPaid, observedAmount, observedMinimum, observedPaymentAmount, setValue]);
 
     const onSubmit = (formData: VerificationFormValues) => {
         onConfirm(formData);
@@ -166,7 +192,7 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
 
                         {/* Amount */}
                         <div className="space-y-2">
-                            <Label htmlFor="amount">Monto Total</Label>
+                            <Label htmlFor="amount">Saldo / Monto detectado</Label>
                             <div className="relative">
                                 <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
                                 <Input
@@ -193,6 +219,11 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
                                 <Input id="due_date" type="date" className="pl-9" {...register('due_date')} />
                             </div>
                             {errors.due_date && <p className="text-destructive text-xs">{errors.due_date.message}</p>}
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="category">Categoría</Label>
+                            <Input id="category" placeholder="Ej: Tarjeta, Servicios, etc." {...register('category')} />
                         </div>
 
                         {/* Minimum Payment (Optional) */}
@@ -226,11 +257,63 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
                         </div>
 
                         {markPaid && (
-                            <div className="space-y-2">
-                                <Label htmlFor="payment_date">Fecha del débito</Label>
-                                <Input id="payment_date" type="date" {...register('payment_date')} />
-                                {errors.payment_date && <p className="text-destructive text-xs">{errors.payment_date.message}</p>}
-                            </div>
+                            <>
+                                <div className="space-y-2">
+                                    <Label htmlFor="payment_amount">Monto pagado</Label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
+                                        <Input
+                                            id="payment_amount"
+                                            type="text"
+                                            inputMode="decimal"
+                                            autoComplete="off"
+                                            className="pl-7"
+                                            placeholder="Ej: 45000"
+                                            {...register('payment_amount')}
+                                            onFocus={(event) => event.currentTarget.select()}
+                                        />
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setValue('payment_amount', Number(observedAmount || 0))}
+                                        >
+                                            Usar total
+                                        </Button>
+                                        {Number(observedMinimum || 0) > 0 ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setValue('payment_amount', Number(observedMinimum || 0))}
+                                            >
+                                                Usar mínimo
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    {errors.payment_amount && <p className="text-destructive text-xs">{errors.payment_amount.message}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="payment_date">Fecha del débito</Label>
+                                    <Input id="payment_date" type="date" {...register('payment_date')} />
+                                    {errors.payment_date && <p className="text-destructive text-xs">{errors.payment_date.message}</p>}
+                                </div>
+
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label htmlFor="payment_description" className="flex items-center gap-2">
+                                        Descripción del pago
+                                        <span className="text-xs text-muted-foreground font-normal">(Opcional)</span>
+                                    </Label>
+                                    <Input
+                                        id="payment_description"
+                                        placeholder={`Ej: Pago ${defaultTitle}`}
+                                        {...register('payment_description')}
+                                    />
+                                </div>
+                            </>
                         )}
                     </div>
 

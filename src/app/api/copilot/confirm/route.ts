@@ -7,6 +7,7 @@ import { recordAuditEvent } from '@/lib/audit';
 const CopilotConfirmationSchema = z.object({
     title: z.string().min(1, 'El título es obligatorio'),
     amount: z.coerce.number().positive('El monto debe ser mayor a 0'),
+    payment_amount: z.coerce.number().positive().optional().nullable(),
     due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
     category: z.string().min(1).default('Varios'),
     minimum_payment: z.coerce.number().optional().nullable(),
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
                 title: validated.title,
                 amount: validated.amount,
                 due_date: validated.due_date,
-                status: validated.mark_paid ? 'paid' : 'pending',
+                status: 'pending',
                 category: validated.category || 'Varios',
                 minimum_payment: validated.minimum_payment ?? null,
             })
@@ -66,6 +67,10 @@ export async function POST(req: Request) {
         if (obligationError || !obligation) {
             return NextResponse.json({ error: obligationError?.message || 'No se pudo crear la obligación.' }, { status: 500 });
         }
+
+        // Keep a mutable reference so we can return the final state (e.g. after partial payment updates).
+        let obligationFinal = obligation;
+        let remainingAfterPayment: number | null = null;
 
         let debt: any = null;
         if (shouldCreateDebt) {
@@ -110,12 +115,23 @@ export async function POST(req: Request) {
             const paymentDescription = (validated.payment_description || '').trim()
                 || `Pago confirmado desde resumen: ${validated.title}`;
 
+            const paymentAmount = Number(validated.payment_amount ?? validated.amount);
+            if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+                await supabase
+                    .from('obligations')
+                    .delete()
+                    .eq('id', obligation.id)
+                    .eq('user_id', session.user.id);
+
+                return NextResponse.json({ error: 'Monto de pago inválido.' }, { status: 400 });
+            }
+
             const { data: createdTransaction, error: transactionError } = await supabase
                 .from('transactions')
                 .insert({
                     user_id: session.user.id,
                     type: 'expense',
-                    amount: validated.amount,
+                    amount: paymentAmount,
                     description: paymentDescription,
                     category: validated.category || 'Deudas',
                     date: paymentDate,
@@ -145,6 +161,52 @@ export async function POST(req: Request) {
             }
 
             transaction = createdTransaction;
+
+            // Update obligation status and remaining amount (supports partial payments).
+            const remaining = Math.max(Number(validated.amount) - paymentAmount, 0);
+            remainingAfterPayment = remaining;
+
+            const updatePayload: Record<string, unknown> = remaining <= 0
+                ? { status: 'paid' }
+                : { status: 'pending', amount: Number(remaining.toFixed(2)) };
+
+            const { data: updatedObligation, error: updateError } = await supabase
+                .from('obligations')
+                .update(updatePayload)
+                .eq('id', obligation.id)
+                .eq('user_id', session.user.id)
+                .select()
+                .single();
+
+            if (updateError || !updatedObligation) {
+                // Rollback: delete transaction and obligation if we couldn't update the obligation.
+                await supabase
+                    .from('transactions')
+                    .delete()
+                    .eq('id', createdTransaction.id)
+                    .eq('user_id', session.user.id);
+
+                if (debt?.id) {
+                    await supabase
+                        .from('debts')
+                        .delete()
+                        .eq('id', debt.id)
+                        .eq('user_id', session.user.id);
+                }
+
+                await supabase
+                    .from('obligations')
+                    .delete()
+                    .eq('id', obligation.id)
+                    .eq('user_id', session.user.id);
+
+                return NextResponse.json(
+                    { error: updateError?.message || 'No se pudo actualizar la obligación.' },
+                    { status: 500 }
+                );
+            }
+
+            obligationFinal = updatedObligation;
         }
 
         await recordAuditEvent({
@@ -189,6 +251,26 @@ export async function POST(req: Request) {
                     linkedObligationId: obligation.id,
                 },
             });
+
+            // Record the obligation update after payment (partial or full).
+            if (obligationFinal && (obligationFinal.status !== obligation.status || Number(obligationFinal.amount) !== Number(obligation.amount))) {
+                await recordAuditEvent({
+                    supabase,
+                    userId: session.user.id,
+                    entityType: 'obligation',
+                    entityId: obligation.id,
+                    action: 'update',
+                    beforeData: obligation,
+                    afterData: obligationFinal,
+                    metadata: {
+                        source: 'copilot_confirm_payment',
+                        paymentAmount: Number(validated.payment_amount ?? validated.amount),
+                        paymentDate,
+                        transactionId: transaction.id,
+                        remaining: remainingAfterPayment,
+                    },
+                });
+            }
         }
 
         logInfo('copilot_confirmation_saved', {
@@ -201,9 +283,10 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json({
-            obligation,
+            obligation: obligationFinal,
             debt,
             transaction,
+            remaining: remainingAfterPayment,
             links: {
                 obligationId: obligation.id,
                 debtId: debt?.id ?? null,

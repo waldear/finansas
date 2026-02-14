@@ -84,6 +84,8 @@ export default function CopilotPage() {
                     create_debt: isDebtLikeDocument,
                     mark_paid: Boolean(formData.mark_paid),
                     payment_date: formData.mark_paid ? formData.payment_date : null,
+                    payment_amount: formData.mark_paid ? (formData.payment_amount ?? null) : null,
+                    payment_description: formData.mark_paid ? (formData.payment_description ?? null) : null,
                 }),
             });
 
@@ -100,7 +102,8 @@ export default function CopilotPage() {
             ]);
 
             if (confirmationBody?.transaction?.id) {
-                toast.success('Pago registrado: se actualizó obligación y transacción.');
+                const remaining = Number(confirmationBody?.remaining ?? 0);
+                toast.success(remaining > 0 ? 'Pago registrado. Queda saldo pendiente.' : 'Pago registrado: obligación saldada.');
             } else if (confirmationBody?.debt?.id) {
                 toast.success('Obligación y deuda registradas correctamente.');
             } else {
