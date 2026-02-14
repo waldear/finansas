@@ -67,7 +67,11 @@ function parseMoneyInput(value: string) {
             normalized = stripped.replace(/,/g, '');
         }
     } else if (hasComma) {
-        normalized = stripped.replace(',', '.');
+        normalized = stripped.replace(/\./g, '').replace(',', '.');
+    } else if (hasDot) {
+        if (/^-?\d{1,3}(\.\d{3})+$/.test(stripped)) {
+            normalized = stripped.replace(/\./g, '');
+        }
     }
 
     const parsed = Number(normalized);
