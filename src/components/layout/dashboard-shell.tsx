@@ -97,10 +97,10 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground pb-24 md:pb-0 md:pl-20">
+        <div className="min-h-screen overflow-x-hidden bg-background text-foreground pb-24 md:pb-0 md:pl-20">
             <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-xl">
                 <div className="container flex h-20 items-center justify-between px-6">
-                    <div className="flex items-center gap-4">
+                    <div className="flex min-w-0 flex-1 items-center gap-4">
                         <Popover>
                             <PopoverTrigger asChild>
                                 <button
@@ -176,13 +176,13 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
                             </PopoverContent>
                         </Popover>
 
-                        <div>
+                        <div className="min-w-0">
                             <p className="text-xs font-medium text-muted-foreground">Hola de nuevo,</p>
-                            <h2 className="text-lg font-bold tracking-tight">{userNick}</h2>
+                            <h2 className="truncate text-lg font-bold tracking-tight">{userNick}</h2>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="shrink-0 flex items-center gap-2">
                         <NotificationCenter />
                     </div>
                 </div>
