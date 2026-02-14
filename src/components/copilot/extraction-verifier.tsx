@@ -38,8 +38,29 @@ interface ExtractionVerifierProps {
 }
 
 export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVerifierProps) {
+    const extractedIssuer = typeof data?.issuer === 'string' ? data.issuer.trim() : '';
+    const extractedBrand = typeof data?.card_brand === 'string' ? data.card_brand.trim() : '';
+    const extractedPeriod = typeof data?.period_label === 'string' ? data.period_label.trim() : '';
+    const extractedTotals = data?.totals_by_currency && typeof data.totals_by_currency === 'object'
+        ? data.totals_by_currency
+        : null;
+
+    const defaultTitle = (() => {
+        if (data?.type === 'credit_card') {
+            const parts = [
+                'Resumen',
+                extractedIssuer || 'Tarjeta',
+                extractedBrand,
+                extractedPeriod,
+            ].filter(Boolean);
+            return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+        }
+
+        return data.merchant || `Gasto detectado (${data.type})`;
+    })();
+
     const defaultValues: VerificationFormValues = {
-        title: data.merchant || `Gasto detectado (${data.type})`,
+        title: defaultTitle,
         amount: data.total_amount || 0,
         due_date: data.due_date || new Date().toISOString().split('T')[0],
         category: 'Varios', // Default
@@ -71,6 +92,32 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
                 </p>
             </CardHeader>
             <CardContent>
+                {data?.type === 'credit_card' && (
+                    <div className="mb-5 rounded-lg border bg-muted/20 p-4 text-xs space-y-2">
+                        <p className="text-sm font-semibold">Resumen de tarjeta detectado</p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div>
+                                <p className="text-muted-foreground">Emisor</p>
+                                <p className="font-medium">{extractedIssuer || 'No detectado'}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground">Marca</p>
+                                <p className="font-medium">{extractedBrand || 'No detectado'}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground">Total ARS</p>
+                                <p className="font-medium">{extractedTotals?.ARS ? `$ ${Number(extractedTotals.ARS).toFixed(0)}` : 'No detectado'}</p>
+                            </div>
+                            <div>
+                                <p className="text-muted-foreground">Total USD</p>
+                                <p className="font-medium">{extractedTotals?.USD ? `USD ${Number(extractedTotals.USD).toFixed(2)}` : 'No detectado'}</p>
+                            </div>
+                        </div>
+                        <p className="text-muted-foreground">
+                            Consejo: podés guardar el vencimiento acá y luego ir a “Analizar con asistente” para la recomendación de pago según tu liquidez.
+                        </p>
+                    </div>
+                )}
                 <form id="verification-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Title */}

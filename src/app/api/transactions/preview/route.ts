@@ -91,11 +91,15 @@ function categoryFromDescription(type: 'income' | 'expense', description: string
         return 'Ingresos';
     }
 
+    if (/suscrip|subscription|membresia|membres[ií]a|netflix|spotify|disney|prime video|hbo|max|paramount/.test(text)) {
+        return 'Suscripciones';
+    }
     if (/super|mercado|almacen/.test(text)) return 'Supermercado';
     if (/comida|almuerzo|cena|desayuno|resto|restaurante/.test(text)) return 'Comida';
     if (/nafta|gasolina|transporte|uber|taxi|subte|colectivo/.test(text)) return 'Transporte';
     if (/luz|agua|gas|internet|telefono|servicio/.test(text)) return 'Servicios';
     if (/salud|farmacia|medico/.test(text)) return 'Salud';
+    if (/tecnolog|tecnologia|apple|google|microsoft|steam|playstation|xbox|amazon web services|aws/.test(text)) return 'Tecnología';
     if (/educacion|curso|colegio/.test(text)) return 'Educación';
     if (/ocio|netflix|spotify|cine|entretenimiento/.test(text)) return 'Entretenimiento';
     if (/tarjeta|deuda|prestamo|préstamo/.test(text)) return 'Deudas';
@@ -191,9 +195,15 @@ function parseRowsFromExtraction(extraction: any, maxRows: number) {
                 : 'expense';
         }
 
-        const category = /\b(ahorro|fondo)\b/.test(normalizedLabel)
-            ? 'Ahorro'
-            : categoryFromDescription(type, label);
+        const extractedCategory = typeof entry?.category === 'string' && entry.category.trim()
+            ? entry.category.trim().slice(0, 40)
+            : null;
+
+        const category = extractedCategory
+            ? extractedCategory
+            : /\b(ahorro|fondo)\b/.test(normalizedLabel)
+                ? 'Ahorro'
+                : categoryFromDescription(type, label);
 
         const dateValue = typeof entry?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date)
             ? entry.date

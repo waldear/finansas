@@ -289,11 +289,15 @@ function categoryFromDescription(type: 'income' | 'expense', description: string
         return 'Ingresos';
     }
 
+    if (/suscrip|subscription|membresia|membres[ií]a|netflix|spotify|disney|prime video|hbo|max|paramount/.test(text)) {
+        return 'Suscripciones';
+    }
     if (/super|mercado|almacen/.test(text)) return 'Supermercado';
     if (/comida|almuerzo|cena|desayuno|resto|restaurante/.test(text)) return 'Comida';
     if (/nafta|gasolina|transporte|uber|taxi|subte|colectivo/.test(text)) return 'Transporte';
     if (/luz|agua|gas|internet|telefono|servicio/.test(text)) return 'Servicios';
     if (/salud|farmacia|medico/.test(text)) return 'Salud';
+    if (/tecnolog|tecnologia|apple|google|microsoft|steam|playstation|xbox|amazon web services|aws/.test(text)) return 'Tecnología';
     if (/educacion|curso|colegio/.test(text)) return 'Educación';
     if (/ocio|netflix|spotify|cine|entretenimiento/.test(text)) return 'Entretenimiento';
     if (/tarjeta|deuda|prestamo|prestamo/.test(text)) return 'Deudas';
@@ -490,9 +494,15 @@ function parseDocumentEntriesForRegistration(message: string, extraction: any): 
                 : 'expense';
         }
 
-        const category = /\b(ahorro|fondo)\b/.test(normalizedLabel)
-            ? 'Ahorro'
-            : categoryFromDescription(type, label);
+        const extractedCategory = typeof (entry as any)?.category === 'string' && String((entry as any).category).trim()
+            ? String((entry as any).category).trim().slice(0, 40)
+            : null;
+
+        const category = extractedCategory
+            ? extractedCategory
+            : /\b(ahorro|fondo)\b/.test(normalizedLabel)
+                ? 'Ahorro'
+                : categoryFromDescription(type, label);
 
         const dateValue = typeof entry?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date)
             ? entry.date
@@ -1203,6 +1213,10 @@ export async function POST(req: Request) {
             const days = daysUntil(obligation.due_date);
             return days !== null && days < 0;
         });
+        const totalActiveDebt = activeDebts.reduce((accumulator, debt) => accumulator + parseNumber(debt.total_amount), 0);
+        const totalPendingObligations = pendingObligations.reduce((accumulator, obligation) => accumulator + parseNumber(obligation.amount), 0);
+        const netWorthProxy = balance - totalActiveDebt;
+        const liquidityAfterObligations = balance - totalPendingObligations;
 
         const monthExpenses = transactions.filter(
             (transaction) => transaction.type === 'expense' && typeof transaction.date === 'string' && transaction.date.startsWith(month)
@@ -1265,8 +1279,10 @@ export async function POST(req: Request) {
                 balance,
                 totalIncome,
                 totalExpenses,
-                totalActiveDebt: activeDebts.reduce((accumulator, debt) => accumulator + parseNumber(debt.total_amount), 0),
-                totalPendingObligations: pendingObligations.reduce((accumulator, obligation) => accumulator + parseNumber(obligation.amount), 0),
+                totalActiveDebt,
+                totalPendingObligations,
+                netWorthProxy,
+                liquidityAfterObligations,
                 overdueObligations: overdueObligations.length,
                 pendingObligationsCount: pendingObligations.length,
                 activeDebtsCount: activeDebts.length,
@@ -1293,6 +1309,12 @@ Reglas de veracidad:
 - Si falta un dato del usuario, dilo explícitamente y pregunta lo mínimo necesario.
 - Puedes dar recomendaciones generales (educativas) cuando falte información, pero acláralo como general.
 
+Modo Analista de Resumen de Tarjeta (cuando haya adjunto):
+- Si "attachedDocument.extraction.type" es "credit_card", actúa como Analista de Finanzas Personales especializado en optimización de flujo de caja y gestión de deuda.
+- Objetivo: interpretar el resumen independientemente del banco/marca (Visa/Mastercard/Amex/Naranja, etc.) y recomendar cómo pagar según el patrimonio/liquidez del usuario.
+- Usa estos campos si existen (pueden venir null): issuer, card_brand, totals_by_currency (ARS/USD), due_date, minimum_payment, interest_rates (tna/tea/cft), available_credit_limit, spending_by_category, installments, installment_projection, fees, alerts.
+- Privacidad: NO repitas números largos, datos personales, direcciones, ni nombres completos. Si aparecen, trátalos como redactados.
+
 Cómo responder:
 - Si el usuario hace una pregunta puntual, respóndela primero (1-5 líneas).
 - Si el usuario pide análisis/plan, o si no hay una pregunta concreta, usa este formato:
@@ -1309,6 +1331,15 @@ Prioriza:
 - pagos de deudas
 - desvíos de presupuesto
 - riesgo de liquidez (si balance es bajo frente a obligaciones)
+
+Guía adicional para Resumen de Tarjeta:
+- Empieza con una extracción estructurada (Emisor/Marca, Totales ARS/USD, Vencimiento, Pago mínimo, TNA/TEA/CFT, Límite disponible).
+- Cuotas y "arrastre" 3-6 meses: si existe "installment_projection" úsalo; si no, estima usando "installments" (monto por cuota x cuotas restantes).
+- Recomendación por escenarios (usa "summary.netWorthProxy" y "summary.liquidityAfterObligations" como proxy de patrimonio/liquidez; si no alcanza, pregunta "¿cuánto efectivo/ahorros tenés disponibles para pagar hoy?"):
+  - Alta liquidez: si el usuario puede cubrir el total, prioriza "Pago total" (evita intereses; más aún si CFT es alto).
+  - Liquidez media: si cubrir el total aprieta, sugiere pagar mínimo + extra y buscar planes/promos a 0% (si existen) para reemplazar financiamiento caro.
+  - Baja liquidez: prioriza evitar mora (pago mínimo), reduce gastos y compara alternativas de financiamiento más baratas que el CFT de la tarjeta si las hay.
+- Alertas de control: marca seguros/comisiones/mantenimiento/intereses/impuestos y "cargos raros" (fees/alerts) y qué confirmar con el usuario.
 `;
 
         const generationRequest = `

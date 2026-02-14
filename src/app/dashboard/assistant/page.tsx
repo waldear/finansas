@@ -114,6 +114,7 @@ export default function AssistantPage() {
     }));
 
     const documentPrompts = [
+        { label: 'Pago del resumen', prompt: 'Analizá este resumen de tarjeta y recomendame cómo pagarlo según mi patrimonio/liquidez. Mostrá totales ARS/USD, vencimiento, mínimo, CFT/TNA/TEA, cuotas futuras y alertas de cargos.' },
         { label: 'Resumir', prompt: 'Resumí el documento en puntos clave y una conclusión.' },
         { label: 'Gastos y categorías', prompt: 'Del documento, detectá los gastos principales, categorizalos y sugerí 3 recortes.' },
         { label: 'Vencimientos', prompt: 'Del documento, identificá vencimientos, cuotas o suscripciones y recomendame recordatorios.' },
