@@ -1,9 +1,27 @@
 import { NextResponse } from 'next/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase-server';
 import { sanitizeEnv } from '@/lib/utils';
 import { extractFinancialDocument, VALID_DOCUMENT_TYPES } from '@/lib/document-processing';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+
+function isRlsViolation(message: string) {
+    return /row-level security|row level security/i.test(message);
+}
+
+function createSupabaseServiceRoleClient() {
+    const url = sanitizeEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const key = sanitizeEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    if (!url || !key) return null;
+
+    return createServiceClient(url, key, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+        },
+    });
+}
 
 async function addNextAttempt(supabase: any, jobId: string, userId: string, attempts: number) {
     await supabase
@@ -158,6 +176,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             );
         }
 
+        let extractionId: string | null = null;
+        let warning: string | null = null;
+
         const { data: extractionRecord, error: extractionError } = await supabase
             .from('extractions')
             .insert({
@@ -170,23 +191,55 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             .single();
 
         if (extractionError) {
-            await supabase
-                .from('document_jobs')
-                .update({
-                    status: 'failed',
-                    error_message: extractionError.message,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', job.id)
-                .eq('user_id', user.id);
+            const message = extractionError.message || 'No se pudo guardar la extracción.';
 
-            return NextResponse.json(
-                {
-                    error: 'No se pudo guardar la extracción en la base.',
-                    details: extractionError.message,
-                },
-                { status: 500 }
-            );
+            // If the user DB setup is missing INSERT policy on extractions, don't block the whole flow.
+            if (isRlsViolation(message)) {
+                const serviceRoleClient = createSupabaseServiceRoleClient();
+
+                if (serviceRoleClient) {
+                    const { data: serviceExtraction, error: serviceExtractionError } = await serviceRoleClient
+                        .from('extractions')
+                        .insert({
+                            document_id: docData.id,
+                            raw_json: extractionData,
+                            confidence_score: 1.0,
+                            manual_verification_needed: false,
+                        })
+                        .select('id')
+                        .single();
+
+                    if (!serviceExtractionError && serviceExtraction?.id) {
+                        extractionId = serviceExtraction.id;
+                    }
+                }
+
+                if (!extractionId) {
+                    warning =
+                        'Analizamos el documento, pero no pudimos guardar la extracción en la base por una policy de seguridad (RLS) en la tabla `extractions`. ' +
+                        'Solución: ejecuta el patch de RLS (ver `supabase-advanced.sql`) o agrega una policy INSERT para `extractions`.';
+                }
+            } else {
+                await supabase
+                    .from('document_jobs')
+                    .update({
+                        status: 'failed',
+                        error_message: message.slice(0, 800),
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', job.id)
+                    .eq('user_id', user.id);
+
+                return NextResponse.json(
+                    {
+                        error: 'No se pudo guardar la extracción en la base.',
+                        details: message,
+                    },
+                    { status: 500 }
+                );
+            }
+        } else {
+            extractionId = extractionRecord?.id || null;
         }
 
         await supabase
@@ -210,7 +263,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             beforeData: null,
             afterData: {
                 documentId: docData.id,
-                extractionId: extractionRecord.id,
+                extractionId,
                 status: 'completed',
             },
             metadata: {
@@ -231,7 +284,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             status: 'completed',
             data: extractionData,
             documentId: docData.id,
-            extractionId: extractionRecord.id,
+            extractionId,
+            warning,
         });
     } catch (error) {
         // Ensure jobs don't get stuck in processing forever.

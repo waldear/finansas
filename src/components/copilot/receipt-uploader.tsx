@@ -132,6 +132,9 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
                 if (runBody?.status === 'completed' && runBody?.data) {
                     setUploadProgress(100);
                     toast.success('Documento procesado con éxito');
+                    if (runBody?.warning) {
+                        toast.warning(String(runBody.warning));
+                    }
 
                     setTimeout(() => {
                         emitUploadComplete(runBody.data, runBody.documentId, runBody.extractionId);

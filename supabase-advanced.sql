@@ -208,6 +208,44 @@ drop policy if exists "Users can insert their own assistant usage" on assistant_
 create policy "Users can insert their own assistant usage" on assistant_usage_events
   for insert with check (auth.uid() = user_id);
 
+-- Fix: extractions needs INSERT policy (Copilot async jobs insert into `extractions`)
+-- Note: `extractions` table is created in `supabase-copilot.sql`.
+drop policy if exists "Users can insert extractions for their documents" on extractions;
+create policy "Users can insert extractions for their documents" on extractions
+  for insert with check (
+    exists (
+      select 1 from documents
+      where documents.id = document_id
+      and documents.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Users can update extractions for their documents" on extractions;
+create policy "Users can update extractions for their documents" on extractions
+  for update using (
+    exists (
+      select 1 from documents
+      where documents.id = document_id
+      and documents.user_id = auth.uid()
+    )
+  ) with check (
+    exists (
+      select 1 from documents
+      where documents.id = document_id
+      and documents.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Users can delete extractions for their documents" on extractions;
+create policy "Users can delete extractions for their documents" on extractions
+  for delete using (
+    exists (
+      select 1 from documents
+      where documents.id = document_id
+      and documents.user_id = auth.uid()
+    )
+  );
+
 -- Ensure storage bucket exists and is private
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
