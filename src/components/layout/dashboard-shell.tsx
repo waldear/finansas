@@ -97,7 +97,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <div className="min-h-screen overflow-x-hidden bg-background text-foreground pb-24 md:pb-0 md:pl-20">
+        <div className="min-h-screen overflow-x-hidden bg-background text-foreground pb-24 md:pb-0 md:pl-20 flex flex-col">
             <header className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-xl">
                 <div className="container flex h-20 items-center justify-between px-6">
                     <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -221,7 +221,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
                 </Button>
             </aside>
 
-            <main className="container mx-auto max-w-7xl px-4 py-6 md:px-8">
+            <main className="container mx-auto max-w-7xl px-4 py-6 md:px-8 flex flex-col flex-1 min-h-0">
                 {children}
             </main>
 

@@ -618,7 +618,7 @@ export default function AssistantPage() {
     };
 
     return (
-        <div className="mx-auto flex h-[calc(100dvh-11.5rem)] min-h-[32rem] w-full max-w-4xl flex-col space-y-4 md:h-[calc(100vh-10rem)]">
+        <div className="mx-auto flex w-full max-w-4xl flex-1 min-h-0 flex-col space-y-4">
             <Card className="flex-1 flex flex-col min-h-0 border-none shadow-lg">
                 <CardHeader className="border-b bg-primary/5">
                     <CardTitle className="flex items-center justify-between gap-2">
