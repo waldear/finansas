@@ -191,20 +191,21 @@ export default function TransactionsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-3xl font-bold tracking-tight">Transacciones</h2>
-                <div className="flex items-center gap-2">
-                    <Button asChild variant="ghost">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <Button asChild variant="ghost" className="w-full justify-start sm:w-auto sm:justify-center">
                         <Link href="/dashboard/history">Editar / Eliminar Movimientos</Link>
                     </Button>
                     <Button
                         variant="outline"
                         onClick={() => runRecurring()}
                         disabled={isRunningRecurring}
-                        className="gap-2"
+                        className="w-full gap-2 sm:w-auto"
                     >
                         <RefreshCcw className={cn('h-4 w-4', isRunningRecurring && 'animate-spin')} />
-                        Ejecutar Recurrencias
+                        <span className="sm:hidden">Recurrencias</span>
+                        <span className="hidden sm:inline">Ejecutar Recurrencias</span>
                     </Button>
                 </div>
             </div>
@@ -224,12 +225,12 @@ export default function TransactionsPage() {
                         ) : transactions.length > 0 ? (
                             <div className="space-y-4">
                                 {transactions.slice(0, 10).map((transaction: any) => (
-                                    <div key={transaction.id} className="flex justify-between items-center border-b pb-2">
-                                        <div>
-                                            <p className="font-medium">{transaction.description}</p>
-                                            <p className="text-xs text-muted-foreground">{transaction.category} • {transaction.date}</p>
+                                    <div key={transaction.id} className="flex items-start justify-between gap-3 border-b pb-2">
+                                        <div className="min-w-0">
+                                            <p className="font-medium break-words">{transaction.description}</p>
+                                            <p className="text-xs text-muted-foreground break-words">{transaction.category} • {transaction.date}</p>
                                         </div>
-                                        <p className={`font-bold ${transaction.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
+                                        <p className={`shrink-0 font-bold ${transaction.type === 'income' ? 'text-emerald-500' : 'text-red-500'}`}>
                                             {transaction.type === 'income' ? '+' : '-'} {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(transaction.amount)}
                                         </p>
                                     </div>
