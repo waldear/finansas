@@ -195,6 +195,33 @@ export async function extractFinancialDocument(params: {
         return parseExtraction(text);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`No se pudo interpretar la respuesta del modelo (${modelName}): ${message}`);
+
+        // One repair attempt: ask Gemini to output a strict JSON object matching the schema.
+        try {
+            const repairPrompt = `
+You are a strict JSON fixer.
+Convert the following content into a VALID JSON object that matches this schema exactly:
+${extractionSchema}
+Return ONLY the JSON object. No markdown, no code fences, no commentary.
+CONTENT:
+${String(text || '').slice(0, 20000)}
+`;
+
+            const repaired = await generateGeminiContentWithFallback({
+                apiKey,
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                    temperature: 0,
+                },
+                request: repairPrompt,
+            });
+
+            return parseExtraction(repaired.text);
+        } catch (repairError) {
+            const repairMessage = repairError instanceof Error ? repairError.message : String(repairError);
+            throw new Error(
+                `No se pudo interpretar la respuesta del modelo (${modelName}): ${message} | Repair: ${repairMessage}`
+            );
+        }
     }
 }

@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES } from '@/lib/assistant-attachments';
 
 interface ReceiptUploaderProps {
     onUploadComplete: (data: any) => void;
@@ -19,6 +20,7 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
     const [file, setFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const lastPrefillKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -27,11 +29,13 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
         if (lastPrefillKeyRef.current === key) return;
         lastPrefillKeyRef.current = key;
         setFile(prefillFile);
+        setUploadError(null);
     }, [prefillFile]);
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
         if (acceptedFiles.length > 0) {
             setFile(acceptedFiles[0]);
+            setUploadError(null);
         }
     }, []);
 
@@ -42,13 +46,13 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
             'application/pdf': ['.pdf']
         },
         maxFiles: 1,
-        maxSize: 5 * 1024 * 1024, // 5MB
+        maxSize: MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES,
         onDropRejected: (rejections) => {
             const firstError = rejections[0]?.errors[0];
             if (!firstError) return;
 
             if (firstError.code === 'file-too-large') {
-                toast.error('El archivo supera 5MB. Comprime el PDF o sube una imagen.');
+                toast.error('El archivo supera 10MB. Comprime el PDF o sube una imagen.');
                 return;
             }
 
@@ -64,6 +68,7 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
     const removeFile = (e: React.MouseEvent) => {
         e.stopPropagation();
         setFile(null);
+        setUploadError(null);
     };
 
     const emitUploadComplete = (payload: any, documentId?: string | null, extractionId?: string | null) => {
@@ -78,6 +83,7 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
         if (!file) return;
 
         setIsUploading(true);
+        setUploadError(null);
         setUploadProgress(10);
 
         try {
@@ -114,7 +120,10 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
 
                 const runBody = await runResponse.json().catch(() => null);
                 if (!runResponse.ok) {
-                    throw new Error(runBody?.error || 'No se pudo iniciar el procesamiento del documento.');
+                    const composedMessage = [runBody?.error, runBody?.details, runBody?.hint]
+                        .filter(Boolean)
+                        .join(' · ');
+                    throw new Error(composedMessage || 'No se pudo iniciar el procesamiento del documento.');
                 }
 
                 if (runBody?.status === 'completed' && runBody?.data) {
@@ -176,7 +185,11 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
 
         } catch (error: any) {
             console.error(error);
-            toast.error(error.message || 'Error al subir el archivo');
+            const message = typeof error?.message === 'string' && error.message.trim()
+                ? error.message.trim()
+                : 'Error al procesar el archivo';
+            setUploadError(message);
+            toast.error(message);
             setIsUploading(false);
             setUploadProgress(0);
         }
@@ -197,12 +210,12 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
                         <div className="p-4 rounded-full bg-primary/10 mb-4">
                             <Upload className="w-8 h-8 text-primary" />
                         </div>
-                        <h3 className="text-lg font-semibold mb-2">Sube tu comprobante</h3>
+                        <h3 className="text-lg font-semibold mb-2">Adjuntar PDF o foto</h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                            Arrastra y suelta tu archivo aquí, o haz clic para seleccionar.
+                            Arrastra y suelta tu archivo aquí, o haz clic para seleccionarlo.
                         </p>
                         <p className="text-xs text-muted-foreground">
-                            Soporta: JPG, PNG, PDF (Máx 5MB)
+                            Soporta: JPG, PNG, WEBP o PDF (Máx 10MB)
                         </p>
                     </div>
                 ) : (
@@ -238,19 +251,26 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
                                     <span className="font-medium">{uploadProgress}%</span>
                                 </div>
                                 <Progress value={uploadProgress} className="h-2" />
-                                <p className="text-xs text-muted-foreground text-center italic mt-2">
-                                    "Extrayendo datos financieros de tu caos..." 🧾✨
+                                <p className="text-xs text-muted-foreground text-center mt-2">
+                                    Esto puede tardar unos segundos.
                                 </p>
                             </div>
                         ) : (
-                            <Button
-                                onClick={handleUpload}
-                                className="w-full"
-                                size="lg"
-                            >
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Procesar Documento
-                            </Button>
+                            <div className="space-y-3">
+                                <Button
+                                    onClick={handleUpload}
+                                    className="w-full"
+                                    size="lg"
+                                >
+                                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                                    Procesar documento
+                                </Button>
+                                {uploadError && (
+                                    <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                                        {uploadError}
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                 )}

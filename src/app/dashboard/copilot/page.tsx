@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { ReceiptUploader } from '@/components/copilot/receipt-uploader';
 import { ExtractionVerifier } from '@/components/copilot/extraction-verifier';
-import { WeeklyPlan } from '@/components/copilot/weekly-plan';
 import { SetupCheck } from '@/components/copilot/setup-check';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Brain } from 'lucide-react';
@@ -121,7 +120,7 @@ export default function CopilotPage() {
             <div className="container max-w-4xl py-6 space-y-8">
                 <div className="flex flex-col items-center text-center space-y-4">
                     <FinFlowLogo className="w-16 h-16" />
-                    <h1 className="text-3xl font-bold tracking-tight">Tu Copiloto Financiero</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">Adjuntar documento</h1>
                 </div>
                 <SetupCheck onReady={() => setIsReady(true)} />
             </div>
@@ -129,21 +128,16 @@ export default function CopilotPage() {
     }
 
     return (
-        <div className="container max-w-4xl py-6 space-y-8">
-            <div className="flex flex-col items-center text-center space-y-4">
-                <FinFlowLogo className="w-16 h-16" />
-                <h1 className="text-3xl font-bold tracking-tight">Tu Copiloto Financiero</h1>
-                <p className="text-muted-foreground max-w-lg">
-                    Sube tus facturas, resúmenes de tarjeta o tickets.
-                    Yo extraigo los datos y tú solo confirmas.
+        <div className="container max-w-4xl py-6 space-y-6">
+            <div className="flex flex-col items-center text-center space-y-3">
+                <FinFlowLogo className="w-14 h-14" />
+                <h1 className="text-3xl font-bold tracking-tight">Adjuntar documento</h1>
+                <p className="text-muted-foreground max-w-xl text-sm">
+                    Subí un PDF o una foto. Después podés confirmar vencimientos/pagos o enviarlo al Asistente para interpretarlo.
                 </p>
             </div>
 
-            <div className="max-w-2xl mx-auto">
-                <WeeklyPlan />
-            </div>
-
-            <div className="mt-8 transition-all duration-500 ease-in-out">
+            <div className="transition-all duration-500 ease-in-out">
                 {step === 'upload' && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <ReceiptUploader onUploadComplete={handleExtractionComplete} prefillFile={prefillFile} />
@@ -199,11 +193,6 @@ export default function CopilotPage() {
                         </CardContent>
                     </Card>
                 )}
-            </div>
-
-            {/* Fun Fact / Tip Section */}
-            <div className="mt-12 p-4 rounded-lg bg-muted/30 text-center text-sm text-muted-foreground">
-                <p>💡 <strong>Tip Copiloto:</strong> Subir tus gastos apenas ocurren ayuda a predecir tu fin de mes con un 40% más de precisión.</p>
             </div>
         </div>
     );

@@ -185,11 +185,11 @@ export default function DashboardPage() {
         { id: 'expense', label: 'Gastar', icon: ArrowUpRight, color: 'bg-red-500', href: '/dashboard/transactions' },
         {
             id: 'copilot',
-            label: 'Copiloto',
+            label: 'Adjuntar',
             icon: Paperclip,
             color: 'bg-blue-500',
             onClick: () => attachmentInputRef.current?.click(),
-            ariaLabel: 'Adjuntar extracto, resumen o foto para el asistente',
+            ariaLabel: 'Adjuntar extracto, resumen o foto',
         },
         { id: 'audit', label: 'Auditoría', icon: StickyNote, color: 'bg-zinc-700', href: '/dashboard/audit' },
     ] as const;
