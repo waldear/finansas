@@ -10,13 +10,50 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, AlertTriangle, Calendar } from 'lucide-react';
 
+function parseMoney(value: unknown) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value !== 'string') return undefined;
+
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+
+    const stripped = trimmed.replace(/[^\d,.-]/g, '');
+    if (!stripped) return undefined;
+
+    const hasComma = stripped.includes(',');
+    const hasDot = stripped.includes('.');
+    let normalized = stripped;
+
+    if (hasComma && hasDot) {
+        if (stripped.lastIndexOf(',') > stripped.lastIndexOf('.')) {
+            normalized = stripped.replace(/\./g, '').replace(',', '.');
+        } else {
+            normalized = stripped.replace(/,/g, '');
+        }
+    } else if (hasComma) {
+        normalized = stripped.replace(',', '.');
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 // Schema for verification
 const verificationSchema = z.object({
     title: z.string().min(1, 'La descripción es obligatoria'),
-    amount: z.coerce.number().min(0.01, 'El monto debe ser mayor a 0'),
+    amount: z.preprocess(
+        (value) => parseMoney(value),
+        z.number({
+            required_error: 'El monto es obligatorio',
+            invalid_type_error: 'Ingresa un monto válido',
+        }).min(0.01, 'El monto debe ser mayor a 0')
+    ),
     due_date: z.string().min(1, 'La fecha de vencimiento es obligatoria'),
     category: z.string().optional(),
-    minimum_payment: z.coerce.number().optional(),
+    minimum_payment: z.preprocess(
+        (value) => parseMoney(value),
+        z.number({ invalid_type_error: 'Ingresa un monto válido' }).optional()
+    ),
     mark_paid: z.boolean().default(false),
     payment_date: z.string().optional(),
 }).superRefine((values, ctx) => {
@@ -59,12 +96,12 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
         return data.merchant || `Gasto detectado (${data.type})`;
     })();
 
-    const defaultValues: VerificationFormValues = {
+    const defaultValues: Partial<VerificationFormValues> = {
         title: defaultTitle,
-        amount: data.total_amount || 0,
+        amount: typeof data?.total_amount === 'number' && data.total_amount > 0 ? data.total_amount : undefined,
         due_date: data.due_date || new Date().toISOString().split('T')[0],
         category: 'Varios', // Default
-        minimum_payment: data.minimum_payment || 0,
+        minimum_payment: typeof data?.minimum_payment === 'number' && data.minimum_payment > 0 ? data.minimum_payment : undefined,
         mark_paid: false,
         payment_date: new Date().toISOString().split('T')[0],
     };
@@ -132,7 +169,18 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
                             <Label htmlFor="amount">Monto Total</Label>
                             <div className="relative">
                                 <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                                <Input id="amount" type="number" step="0.01" className="pl-7" {...register('amount')} />
+                                <Input
+                                    id="amount"
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    className="pl-7"
+                                    {...register('amount')}
+                                    onFocus={(event) => {
+                                        // Mobile UX: make it easy to overwrite extracted amount (avoids leading 0).
+                                        event.currentTarget.select();
+                                    }}
+                                />
                             </div>
                             {errors.amount && <p className="text-destructive text-xs">{errors.amount.message}</p>}
                         </div>
@@ -156,7 +204,16 @@ export function ExtractionVerifier({ data, onConfirm, onCancel }: ExtractionVeri
                                 </Label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-2.5 text-muted-foreground">$</span>
-                                    <Input id="minimum_payment" type="number" step="0.01" className="pl-7" {...register('minimum_payment')} />
+                                    <Input
+                                        id="minimum_payment"
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        step="0.01"
+                                        className="pl-7"
+                                        {...register('minimum_payment')}
+                                        onFocus={(event) => event.currentTarget.select()}
+                                    />
                                 </div>
                             </div>
                         )}

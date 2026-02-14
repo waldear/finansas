@@ -12,6 +12,9 @@ type FinFlowLogoProps = {
 export function FinFlowLogo({ className, showText = false, title = 'Finansas' }: FinFlowLogoProps) {
     const uniqueId = useId().replace(/:/g, '');
     const bgId = `finansas-bg-${uniqueId}`;
+    const rimId = `finansas-rim-${uniqueId}`;
+    const glareId = `finansas-glare-${uniqueId}`;
+    const bubbleShadowId = `finansas-bubble-shadow-${uniqueId}`;
     const walletId = `finansas-wallet-${uniqueId}`;
     const arrowWarmId = `finansas-arrow-warm-${uniqueId}`;
     const arrowRedId = `finansas-arrow-red-${uniqueId}`;
@@ -23,10 +26,27 @@ export function FinFlowLogo({ className, showText = false, title = 'Finansas' }:
             <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-sm overflow-visible" role="img" aria-label={title}>
                 <defs>
                     <radialGradient id={bgId} cx="30%" cy="25%" r="75%">
-                        <stop offset="0%" stopColor="#F2FDFF" stopOpacity="1" />
-                        <stop offset="55%" stopColor="#CFEAF5" stopOpacity="1" />
-                        <stop offset="100%" stopColor="#A9CBDC" stopOpacity="1" />
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.92" />
+                        <stop offset="45%" stopColor="#CFEAF5" stopOpacity="0.82" />
+                        <stop offset="100%" stopColor="#A9CBDC" stopOpacity="0.92" />
                     </radialGradient>
+
+                    <linearGradient id={rimId} x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
+                        <stop offset="35%" stopColor="#FFFFFF" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.55" />
+                    </linearGradient>
+
+                    <radialGradient id={glareId} cx="30%" cy="25%" r="55%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
+                        <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.30" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+                    </radialGradient>
+
+                    <filter id={bubbleShadowId} x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="10" stdDeviation="8" floodColor="#0B2B3A" floodOpacity="0.28" />
+                        <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#0B2B3A" floodOpacity="0.18" />
+                    </filter>
 
                     <linearGradient id={walletId} x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#22E0D3" />
@@ -54,25 +74,28 @@ export function FinFlowLogo({ className, showText = false, title = 'Finansas' }:
                     </radialGradient>
                 </defs>
 
-                {/* Bubble badge */}
-                <circle cx="60" cy="60" r="56" fill={`url(#${bgId})`} />
-                <circle cx="60" cy="60" r="56" fill="none" stroke="#FFFFFF" strokeOpacity="0.55" strokeWidth="2" />
-                <path
-                    d="M22 46 C 30 22, 50 14, 72 18"
-                    fill="none"
-                    stroke="#FFFFFF"
-                    strokeOpacity="0.45"
-                    strokeWidth="7"
-                    strokeLinecap="round"
-                />
-                <path
-                    d="M20 70 C 20 92, 34 102, 50 104"
-                    fill="none"
-                    stroke="#FFFFFF"
-                    strokeOpacity="0.20"
-                    strokeWidth="7"
-                    strokeLinecap="round"
-                />
+                {/* Bubble badge (glass) */}
+                <g filter={`url(#${bubbleShadowId})`}>
+                    <circle cx="60" cy="60" r="56" fill={`url(#${bgId})`} />
+                    <circle cx="60" cy="60" r="56" fill="none" stroke={`url(#${rimId})`} strokeWidth="2.25" />
+                    <circle cx="52" cy="48" r="34" fill={`url(#${glareId})`} opacity="0.9" />
+                    <path
+                        d="M22 46 C 30 22, 50 14, 72 18"
+                        fill="none"
+                        stroke="#FFFFFF"
+                        strokeOpacity="0.45"
+                        strokeWidth="7"
+                        strokeLinecap="round"
+                    />
+                    <path
+                        d="M20 70 C 20 92, 34 102, 50 104"
+                        fill="none"
+                        stroke="#FFFFFF"
+                        strokeOpacity="0.18"
+                        strokeWidth="7"
+                        strokeLinecap="round"
+                    />
+                </g>
 
                 {/* Arrows */}
                 <path

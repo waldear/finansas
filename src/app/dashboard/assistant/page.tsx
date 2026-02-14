@@ -8,10 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Brain, Crown, FileText, Loader2, Send, Trash2, X } from 'lucide-react';
+import { Brain, Crown, FileText, Loader2, Paperclip, Send, Shield, Trash2, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
 import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 type AssistantDocumentContext = {
     sourceName: string;
@@ -46,6 +47,31 @@ function formatFileSize(bytes: number) {
 
 function isoToday() {
     return new Date().toISOString().split('T')[0];
+}
+
+function parseMoneyInput(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const stripped = trimmed.replace(/[^\d,.-]/g, '');
+    if (!stripped) return null;
+
+    const hasComma = stripped.includes(',');
+    const hasDot = stripped.includes('.');
+    let normalized = stripped;
+
+    if (hasComma && hasDot) {
+        if (stripped.lastIndexOf(',') > stripped.lastIndexOf('.')) {
+            normalized = stripped.replace(/\./g, '').replace(',', '.');
+        } else {
+            normalized = stripped.replace(/,/g, '');
+        }
+    } else if (hasComma) {
+        normalized = stripped.replace(',', '.');
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 const quickPrompts = [
@@ -97,6 +123,7 @@ export default function AssistantPage() {
     const [isPreparingImport, setIsPreparingImport] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [isManualStatementOpen, setIsManualStatementOpen] = useState(false);
+    const [isDocumentToolsOpen, setIsDocumentToolsOpen] = useState(false);
     const [isSavingManualStatement, setIsSavingManualStatement] = useState(false);
     const [manualStatement, setManualStatement] = useState<ManualStatementForm>(() => ({
         title: '',
@@ -438,8 +465,8 @@ export default function AssistantPage() {
             return;
         }
 
-        const amount = Number(manualStatement.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
+        const amount = parseMoneyInput(manualStatement.amount);
+        if (!amount || amount <= 0) {
             toast.error('Saldo total inválido.');
             return;
         }
@@ -453,15 +480,15 @@ export default function AssistantPage() {
         const category = manualStatement.category.trim() || 'Tarjeta';
 
         const minimumRaw = manualStatement.minimumPayment.trim();
-        const minimum_payment = minimumRaw ? Number(minimumRaw) : null;
-        if (minimumRaw && (!Number.isFinite(minimum_payment) || (minimum_payment as number) <= 0)) {
+        const minimum_payment = minimumRaw ? parseMoneyInput(minimumRaw) : null;
+        if (minimumRaw && (!minimum_payment || minimum_payment <= 0)) {
             toast.error('Pago mínimo inválido.');
             return;
         }
 
         const monthlyRaw = manualStatement.monthlyPayment.trim();
-        const monthly_payment = monthlyRaw ? Number(monthlyRaw) : (minimum_payment ?? amount);
-        if (!Number.isFinite(monthly_payment) || monthly_payment <= 0) {
+        const monthly_payment = monthlyRaw ? parseMoneyInput(monthlyRaw) : (minimum_payment ?? amount);
+        if (!monthly_payment || monthly_payment <= 0) {
             toast.error('Pago mensual inválido.');
             return;
         }
@@ -701,245 +728,36 @@ export default function AssistantPage() {
                         onSubmit={(e) => { e.preventDefault(); handleSend(); }}
                         className="space-y-3"
                     >
-                        <div className="rounded-lg border bg-muted/10 px-3 py-2 text-xs">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold">Modo privado (sin adjuntos)</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Para resúmenes de tarjeta: carga saldo, mínimo y vencimiento sin subir el PDF.
-                                    </p>
+                        {documentContext && (
+                            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/10 px-3 py-2 text-xs">
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    <FileText className="h-4 w-4 shrink-0 text-primary" />
+                                    <span className="truncate">{documentContext.sourceName || 'Documento'}</span>
+                                    {documentContext.sizeBytes > 0 ? (
+                                        <span className="shrink-0 text-muted-foreground">({formatFileSize(documentContext.sizeBytes)})</span>
+                                    ) : null}
                                 </div>
                                 <Button
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setIsManualStatementOpen((prev) => !prev)}
-                                    disabled={isSavingManualStatement || isLoading || isImporting}
+                                    className="h-8"
+                                    onClick={() => setIsDocumentToolsOpen(true)}
+                                    disabled={isLoading || isImporting || isPreparingImport}
                                 >
-                                    {isManualStatementOpen ? 'Cerrar' : 'Cargar resumen'}
+                                    Opciones
                                 </Button>
-                            </div>
-
-                            {isManualStatementOpen && (
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                    <Input
-                                        value={manualStatement.title}
-                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, title: event.target.value }))}
-                                        placeholder="Tarjeta / Resumen (ej: Visa Santander)"
-                                        className="h-9 sm:col-span-2"
-                                        disabled={isSavingManualStatement}
-                                    />
-                                    <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        step="0.01"
-                                        value={manualStatement.amount}
-                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, amount: event.target.value }))}
-                                        placeholder="Saldo total"
-                                        className="h-9"
-                                        disabled={isSavingManualStatement}
-                                    />
-                                    <Input
-                                        type="date"
-                                        value={manualStatement.dueDate}
-                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, dueDate: event.target.value }))}
-                                        className="h-9"
-                                        disabled={isSavingManualStatement}
-                                    />
-                                    <Input
-                                        type="number"
-                                        inputMode="decimal"
-                                        step="0.01"
-                                        value={manualStatement.minimumPayment}
-                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, minimumPayment: event.target.value }))}
-                                        placeholder="Pago mínimo (opcional)"
-                                        className="h-9"
-                                        disabled={isSavingManualStatement}
-                                    />
-                                    <Input
-                                        value={manualStatement.category}
-                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, category: event.target.value }))}
-                                        placeholder="Categoría (ej: Tarjeta)"
-                                        className="h-9"
-                                        disabled={isSavingManualStatement}
-                                    />
-
-                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 accent-primary"
-                                            checked={manualStatement.createDebt}
-                                            onChange={(event) => setManualStatement((prev) => ({ ...prev, createDebt: event.target.checked }))}
-                                            disabled={isSavingManualStatement || manualStatement.markPaid}
-                                        />
-                                        Crear deuda (cuotas)
-                                    </label>
-                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 accent-primary"
-                                            checked={manualStatement.markPaid}
-                                            onChange={(event) => setManualStatement((prev) => ({ ...prev, markPaid: event.target.checked }))}
-                                            disabled={isSavingManualStatement}
-                                        />
-                                        Ya lo pagué
-                                    </label>
-
-                                    {manualStatement.createDebt && !manualStatement.markPaid && (
-                                        <>
-                                            <Input
-                                                type="number"
-                                                inputMode="decimal"
-                                                step="0.01"
-                                                value={manualStatement.monthlyPayment}
-                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, monthlyPayment: event.target.value }))}
-                                                placeholder="Pago mensual (opcional)"
-                                                className="h-9"
-                                                disabled={isSavingManualStatement}
-                                            />
-                                            <Input
-                                                type="number"
-                                                inputMode="numeric"
-                                                step="1"
-                                                value={manualStatement.totalInstallments}
-                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, totalInstallments: event.target.value }))}
-                                                placeholder="Total de cuotas"
-                                                className="h-9"
-                                                disabled={isSavingManualStatement}
-                                            />
-                                            <Input
-                                                type="number"
-                                                inputMode="numeric"
-                                                step="1"
-                                                value={manualStatement.remainingInstallments}
-                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, remainingInstallments: event.target.value }))}
-                                                placeholder="Cuotas restantes"
-                                                className="h-9"
-                                                disabled={isSavingManualStatement}
-                                            />
-                                            <div className="hidden sm:block" />
-                                        </>
-                                    )}
-
-                                    {manualStatement.markPaid && (
-                                        <>
-                                            <Input
-                                                type="date"
-                                                value={manualStatement.paymentDate}
-                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDate: event.target.value }))}
-                                                className="h-9"
-                                                disabled={isSavingManualStatement}
-                                            />
-                                            <Input
-                                                value={manualStatement.paymentDescription}
-                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDescription: event.target.value }))}
-                                                placeholder="Descripción del pago (opcional)"
-                                                className="h-9"
-                                                disabled={isSavingManualStatement}
-                                            />
-                                        </>
-                                    )}
-
-                                    <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-1">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => { setIsManualStatementOpen(false); resetManualStatement(); }}
-                                            disabled={isSavingManualStatement}
-                                        >
-                                            Cancelar
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            onClick={handleSaveManualStatement}
-                                            disabled={isSavingManualStatement || isLoading || isImporting}
-                                        >
-                                            {isSavingManualStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                            Guardar resumen
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {!documentContext && (
-                            <div className="rounded-lg border bg-muted/10 px-3 py-2 text-xs">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold">Adjuntos</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Para adjuntar PDFs o fotos usá Copilot. Luego podés analizarlos acá.
-                                        </p>
-                                    </div>
-                                    <Button asChild type="button" variant="outline" size="sm" disabled={isLoading || isImporting}>
-                                        <Link href="/dashboard/copilot">Abrir Copilot</Link>
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {documentContext && (
-                            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs space-y-2">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                                        <FileText className="h-4 w-4 shrink-0 text-primary" />
-                                        <span className="truncate">{documentContext.sourceName || 'Documento'}</span>
-                                        {documentContext.sizeBytes > 0 ? (
-                                            <span className="text-muted-foreground">({formatFileSize(documentContext.sizeBytes)})</span>
-                                        ) : null}
-                                    </div>
-                                    <div className="flex items-center justify-end gap-2">
-                                        <Button asChild type="button" variant="outline" size="sm" className="h-8" disabled={isLoading || isImporting}>
-                                            <Link href="/dashboard/copilot">Cambiar</Link>
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8"
-                                            onClick={() => setDocumentContext(null)}
-                                            disabled={isLoading || isImporting || isPreparingImport}
-                                            title="Quitar documento"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="font-medium">¿Qué querés hacer con el documento?</p>
-                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
-                                            onClick={handlePrepareImport}
-                                            disabled={isLoading || isPreparingImport || isImporting}
-                                        >
-                                            {isPreparingImport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                            Importar movimientos (preview)
-                                        </Button>
-                                        {documentPrompts.map((item) => (
-                                            <Button
-                                                key={item.label}
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
-                                                onClick={() => handleSend(item.prompt)}
-                                                disabled={isLoading || isPreparingImport || isImporting}
-                                            >
-                                                {item.label}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                        Privacidad: para resúmenes de tarjeta, usa Modo privado. Para adjuntos, Copilot procesa y luego el Asistente interpreta.
-                                    </p>
-                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => setDocumentContext(null)}
+                                    disabled={isLoading || isImporting || isPreparingImport}
+                                    title="Quitar documento"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
                             </div>
                         )}
 
@@ -1037,15 +855,45 @@ export default function AssistantPage() {
                             </div>
                         )}
 
-                        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                        <div className="flex items-center gap-2">
+                            <Button
+                                asChild
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-11 w-11 shrink-0"
+                                disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement}
+                                title="Adjuntar (abre Copilot)"
+                            >
+                                <Link href="/dashboard/copilot">
+                                    <Paperclip className="h-4 w-4" />
+                                </Link>
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-11 w-11 shrink-0"
+                                onClick={() => setIsManualStatementOpen(true)}
+                                disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement}
+                                title="Modo privado (sin adjuntos)"
+                            >
+                                <Shield className="h-4 w-4" />
+                            </Button>
                             <Input
                                 placeholder="Pregúntame sobre tus gastos, deudas o consejos de ahorro..."
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement}
-                                className="h-11 min-w-0 flex-1 basis-[12rem]"
+                                className="h-11 min-w-0 flex-1"
                             />
-                            <Button type="submit" size="icon" disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement} className="h-11 w-11" title="Enviar mensaje">
+                            <Button
+                                type="submit"
+                                size="icon"
+                                disabled={isLoading || isImporting || isPreparingImport || isSavingManualStatement}
+                                className="h-11 w-11 shrink-0"
+                                title="Enviar mensaje"
+                            >
                                 {isLoading ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
@@ -1053,8 +901,239 @@ export default function AssistantPage() {
                                 )}
                             </Button>
                         </div>
+
+                        <p className="hidden sm:block text-[11px] text-muted-foreground">
+                            Adjuntos: usá el clip (Copilot). Resúmenes de tarjeta: modo privado.
+                        </p>
                     </form>
                 </div>
+
+                <Sheet open={isManualStatementOpen} onOpenChange={setIsManualStatementOpen}>
+                    <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+                        <SheetHeader>
+                            <SheetTitle>Modo privado (sin adjuntos)</SheetTitle>
+                            <SheetDescription>
+                                Para resúmenes de tarjeta: carga saldo, mínimo y vencimiento sin subir el PDF. El asistente puede recomendarte cómo pagarlo según tu liquidez.
+                            </SheetDescription>
+                        </SheetHeader>
+
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                            <Input
+                                value={manualStatement.title}
+                                onChange={(event) => setManualStatement((prev) => ({ ...prev, title: event.target.value }))}
+                                placeholder="Tarjeta / Resumen (ej: Visa Santander)"
+                                className="h-10 sm:col-span-2"
+                                disabled={isSavingManualStatement}
+                            />
+                            <Input
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                value={manualStatement.amount}
+                                onChange={(event) => setManualStatement((prev) => ({ ...prev, amount: event.target.value }))}
+                                placeholder="Saldo total"
+                                className="h-10"
+                                disabled={isSavingManualStatement}
+                                onFocus={(event) => event.currentTarget.select()}
+                            />
+                            <Input
+                                type="date"
+                                value={manualStatement.dueDate}
+                                onChange={(event) => setManualStatement((prev) => ({ ...prev, dueDate: event.target.value }))}
+                                className="h-10"
+                                disabled={isSavingManualStatement}
+                            />
+                            <Input
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                value={manualStatement.minimumPayment}
+                                onChange={(event) => setManualStatement((prev) => ({ ...prev, minimumPayment: event.target.value }))}
+                                placeholder="Pago mínimo (opcional)"
+                                className="h-10"
+                                disabled={isSavingManualStatement}
+                                onFocus={(event) => event.currentTarget.select()}
+                            />
+                            <Input
+                                value={manualStatement.category}
+                                onChange={(event) => setManualStatement((prev) => ({ ...prev, category: event.target.value }))}
+                                placeholder="Categoría (ej: Tarjeta)"
+                                className="h-10"
+                                disabled={isSavingManualStatement}
+                            />
+
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 accent-primary"
+                                    checked={manualStatement.createDebt}
+                                    onChange={(event) => setManualStatement((prev) => ({ ...prev, createDebt: event.target.checked }))}
+                                    disabled={isSavingManualStatement || manualStatement.markPaid}
+                                />
+                                Crear deuda (cuotas)
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 accent-primary"
+                                    checked={manualStatement.markPaid}
+                                    onChange={(event) => setManualStatement((prev) => ({ ...prev, markPaid: event.target.checked }))}
+                                    disabled={isSavingManualStatement}
+                                />
+                                Ya lo pagué
+                            </label>
+
+                            {manualStatement.createDebt && !manualStatement.markPaid && (
+                                <>
+                                    <Input
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={manualStatement.monthlyPayment}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, monthlyPayment: event.target.value }))}
+                                        placeholder="Pago mensual (opcional)"
+                                        className="h-10"
+                                        disabled={isSavingManualStatement}
+                                        onFocus={(event) => event.currentTarget.select()}
+                                    />
+                                    <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        step="1"
+                                        value={manualStatement.totalInstallments}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, totalInstallments: event.target.value }))}
+                                        placeholder="Total de cuotas"
+                                        className="h-10"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        step="1"
+                                        value={manualStatement.remainingInstallments}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, remainingInstallments: event.target.value }))}
+                                        placeholder="Cuotas restantes"
+                                        className="h-10"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <div className="hidden sm:block" />
+                                </>
+                            )}
+
+                            {manualStatement.markPaid && (
+                                <>
+                                    <Input
+                                        type="date"
+                                        value={manualStatement.paymentDate}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDate: event.target.value }))}
+                                        className="h-10"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        value={manualStatement.paymentDescription}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDescription: event.target.value }))}
+                                        placeholder="Descripción del pago (opcional)"
+                                        className="h-10"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                </>
+                            )}
+                        </div>
+
+                        <div className="mt-6 flex flex-wrap justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setIsManualStatementOpen(false);
+                                    resetManualStatement();
+                                }}
+                                disabled={isSavingManualStatement}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={handleSaveManualStatement}
+                                disabled={isSavingManualStatement || isLoading || isImporting}
+                            >
+                                {isSavingManualStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Guardar resumen
+                            </Button>
+                        </div>
+                    </SheetContent>
+                </Sheet>
+
+                <Sheet open={isDocumentToolsOpen} onOpenChange={setIsDocumentToolsOpen}>
+                    <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+                        <SheetHeader>
+                            <SheetTitle>Opciones del documento</SheetTitle>
+                            <SheetDescription>
+                                {documentContext
+                                    ? `${documentContext.sourceName}${documentContext.sizeBytes > 0 ? ` · ${formatFileSize(documentContext.sizeBytes)}` : ''}`
+                                    : 'No hay documento cargado.'}
+                            </SheetDescription>
+                        </SheetHeader>
+
+                        <div className="mt-5 space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                                <Button asChild type="button" variant="outline" disabled={isLoading || isImporting}>
+                                    <Link href="/dashboard/copilot">Cambiar documento</Link>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setDocumentContext(null);
+                                        setIsDocumentToolsOpen(false);
+                                    }}
+                                    disabled={!documentContext || isLoading || isImporting || isPreparingImport}
+                                >
+                                    Quitar documento
+                                </Button>
+                            </div>
+
+                            <div className="rounded-lg border bg-muted/10 p-3 text-xs space-y-2">
+                                <p className="text-sm font-semibold">¿Qué querés hacer con el documento?</p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
+                                        onClick={async () => {
+                                            setIsDocumentToolsOpen(false);
+                                            await handlePrepareImport();
+                                        }}
+                                        disabled={!documentContext || isLoading || isPreparingImport || isImporting}
+                                    >
+                                        {isPreparingImport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Importar movimientos (preview)
+                                    </Button>
+                                    {documentPrompts.map((item) => (
+                                        <Button
+                                            key={item.label}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
+                                            onClick={() => {
+                                                setIsDocumentToolsOpen(false);
+                                                void handleSend(item.prompt);
+                                            }}
+                                            disabled={!documentContext || isLoading || isPreparingImport || isImporting}
+                                        >
+                                            {item.label}
+                                        </Button>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Privacidad: para resúmenes de tarjeta, usa Modo privado. Para adjuntos, Copilot procesa y luego el Asistente interpreta.
+                                </p>
+                            </div>
+                        </div>
+                    </SheetContent>
+                </Sheet>
             </Card>
         </div>
     );
