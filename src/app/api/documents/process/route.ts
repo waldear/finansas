@@ -4,11 +4,20 @@ import { sanitizeEnv } from '@/lib/utils';
 import { ALLOWED_DOCUMENT_MIME_TYPES, extractFinancialDocument } from '@/lib/document-processing';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 
-async function extractInline(file: File, apiKey: string) {
+function inferMimeTypeFromName(name: string) {
+    const lowered = (name || '').toLowerCase();
+    if (lowered.endsWith('.pdf')) return 'application/pdf';
+    if (lowered.endsWith('.png')) return 'image/png';
+    if (lowered.endsWith('.webp')) return 'image/webp';
+    if (lowered.endsWith('.jpg') || lowered.endsWith('.jpeg')) return 'image/jpeg';
+    return '';
+}
+
+async function extractInline(file: File, apiKey: string, mimeType: string) {
     const arrayBuffer = await file.arrayBuffer();
     return extractFinancialDocument({
         apiKey,
-        mimeType: file.type,
+        mimeType,
         base64Data: Buffer.from(arrayBuffer).toString('base64'),
     });
 }
@@ -25,7 +34,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
         }
 
-        if (!ALLOWED_DOCUMENT_MIME_TYPES.has(file.type)) {
+        const effectiveMimeType = file.type || inferMimeTypeFromName(file.name);
+        if (!ALLOWED_DOCUMENT_MIME_TYPES.has(effectiveMimeType)) {
             return NextResponse.json({ error: 'Tipo de archivo no soportado' }, { status: 400 });
         }
 
@@ -52,7 +62,7 @@ export async function POST(req: Request) {
 
         const { error: uploadError } = await supabase.storage
             .from('documents')
-            .upload(filePath, file, { contentType: file.type, upsert: false });
+            .upload(filePath, file, { contentType: effectiveMimeType, upsert: false });
 
         if (uploadError) {
             logWarn('document_upload_failed_fallback_inline', {
@@ -61,7 +71,11 @@ export async function POST(req: Request) {
                 reason: uploadError.message,
             });
             try {
-                const extractionData = await extractInline(file, apiKey);
+                const extractionData = await extractFinancialDocument({
+                    apiKey,
+                    mimeType: effectiveMimeType,
+                    base64Data: Buffer.from(await file.arrayBuffer()).toString('base64'),
+                });
                 return NextResponse.json({
                     success: true,
                     data: extractionData,
@@ -91,7 +105,7 @@ export async function POST(req: Request) {
                 user_id: user.id,
                 file_path: filePath,
                 original_name: file.name,
-                mime_type: file.type,
+                mime_type: effectiveMimeType,
                 status: 'queued',
             })
             .select('id, status, created_at')
@@ -104,7 +118,7 @@ export async function POST(req: Request) {
                 reason: jobError.message,
             });
             try {
-                const extractionData = await extractInline(file, apiKey);
+                const extractionData = await extractInline(file, apiKey, effectiveMimeType);
                 return NextResponse.json({
                     success: true,
                     data: extractionData,
@@ -132,7 +146,7 @@ export async function POST(req: Request) {
             ...context,
             userId: user.id,
             jobId: job.id,
-            mimeType: file.type,
+            mimeType: effectiveMimeType,
             durationMs: Date.now() - startedAt,
         });
 

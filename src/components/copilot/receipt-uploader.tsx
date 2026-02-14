@@ -74,6 +74,9 @@ export function ReceiptUploader({ onUploadComplete, prefillFile }: ReceiptUpload
     const emitUploadComplete = (payload: any, documentId?: string | null, extractionId?: string | null) => {
         onUploadComplete({
             ...payload,
+            _sourceName: file?.name || null,
+            _sourceMimeType: file?.type || null,
+            _sourceSizeBytes: file?.size || null,
             _documentId: documentId || null,
             _extractionId: extractionId || null,
         });

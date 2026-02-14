@@ -47,12 +47,18 @@ export default function CopilotPage() {
             return;
         }
 
+        const sourceNameCandidate = typeof extractedData?._sourceName === 'string' ? extractedData._sourceName.trim() : '';
+        const merchantCandidate = typeof extractedData?.merchant === 'string' ? extractedData.merchant.trim() : '';
+        const sourceName = sourceNameCandidate || merchantCandidate || 'Documento';
+        const mimeType = typeof extractedData?._sourceMimeType === 'string' && extractedData._sourceMimeType.trim()
+            ? extractedData._sourceMimeType.trim()
+            : 'application/octet-stream';
+        const sizeBytes = Number(extractedData?._sourceSizeBytes || 0);
+
         setPendingDocumentContext({
-            sourceName: typeof extractedData?.merchant === 'string' && extractedData.merchant.trim()
-                ? extractedData.merchant.trim()
-                : 'Documento',
-            mimeType: 'application/pdf',
-            sizeBytes: 0,
+            sourceName,
+            mimeType,
+            sizeBytes,
             extraction: extractedData,
         });
 
