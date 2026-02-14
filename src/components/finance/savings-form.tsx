@@ -50,7 +50,7 @@ export function SavingsForm() {
                         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="target_amount">Monto Objetivo</Label>
                             <Input id="target_amount" type="number" step="0.01" {...register('target_amount', { valueAsNumber: true })} />
@@ -63,7 +63,7 @@ export function SavingsForm() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="deadline">Fecha Límite (Opcional)</Label>
                             <Input id="deadline" type="date" {...register('deadline')} />
@@ -74,7 +74,7 @@ export function SavingsForm() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="color">Color de la Barra</Label>
                             <Input id="color" type="color" {...register('color')} className="h-10 px-1 py-1" />

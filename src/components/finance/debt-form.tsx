@@ -42,7 +42,7 @@ export function DebtForm() {
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="name">Nombre / Entidad</Label>
                             <Input id="name" placeholder="Ej: Visa Santander" {...register('name')} />
@@ -55,7 +55,7 @@ export function DebtForm() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="total_amount">Monto Total</Label>
                             <Input id="total_amount" type="number" step="0.01" {...register('total_amount', { valueAsNumber: true })} />
@@ -68,7 +68,7 @@ export function DebtForm() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="total_installments">Cuotas Totales</Label>
                             <Input id="total_installments" type="number" {...register('total_installments', { valueAsNumber: true })} />

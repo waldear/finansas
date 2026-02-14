@@ -49,7 +49,7 @@ export function BudgetForm() {
                         <Input id="budget-category" placeholder="Ej: Comida" {...register('category')} />
                         {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="budget-limit">Límite Mensual</Label>
                             <Input id="budget-limit" type="number" step="0.01" {...register('limit_amount')} />

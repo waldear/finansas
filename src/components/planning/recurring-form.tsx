@@ -64,7 +64,7 @@ export function RecurringForm() {
                         </Select>
                         {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="recurring-amount">Monto</Label>
                             <Input id="recurring-amount" type="number" step="0.01" {...register('amount')} />
@@ -93,7 +93,7 @@ export function RecurringForm() {
                         <Input id="recurring-description" placeholder="Ej: Suscripción Netflix" {...register('description')} />
                         {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="recurring-category">Categoría</Label>
                             <Input id="recurring-category" placeholder="Ej: Entretenimiento" {...register('category')} />

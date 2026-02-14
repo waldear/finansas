@@ -288,7 +288,7 @@ export default function DebtsPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-4 pt-2 border-t text-sm">
+                                            <div className="grid grid-cols-1 gap-3 border-t pt-2 text-sm sm:grid-cols-2 sm:gap-4">
                                                 <div className="flex items-center gap-2">
                                                     <CreditCard className="w-4 h-4 text-muted-foreground" />
                                                     <span>Cuota: {formatCurrency(monthlyPayment)}</span>
