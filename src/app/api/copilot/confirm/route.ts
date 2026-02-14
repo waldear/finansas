@@ -10,6 +10,10 @@ const CopilotConfirmationSchema = z.object({
     due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido'),
     category: z.string().min(1).default('Varios'),
     minimum_payment: z.coerce.number().optional().nullable(),
+    monthly_payment: z.coerce.number().optional().nullable(),
+    total_installments: z.coerce.number().int().optional().nullable(),
+    remaining_installments: z.coerce.number().int().optional().nullable(),
+    debt_next_payment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
     document_type: z.enum(['credit_card', 'invoice', 'bank_statement', 'other']).default('other'),
     extraction_id: z.string().uuid().optional().nullable(),
     document_id: z.string().uuid().optional().nullable(),
@@ -65,7 +69,14 @@ export async function POST(req: Request) {
 
         let debt: any = null;
         if (shouldCreateDebt) {
-            const monthlyPayment = Number(validated.minimum_payment || validated.amount);
+            const totalInstallments = Math.max(1, Number(validated.total_installments || 1));
+            const remainingInstallmentsRaw = validated.remaining_installments == null
+                ? totalInstallments
+                : Math.max(0, Number(validated.remaining_installments));
+            const remainingInstallments = Math.min(remainingInstallmentsRaw, totalInstallments);
+            const nextPaymentDate = validated.debt_next_payment_date || validated.due_date;
+
+            const monthlyPayment = Number(validated.monthly_payment ?? validated.minimum_payment ?? validated.amount);
             const { data: createdDebt, error: debtError } = await supabase
                 .from('debts')
                 .insert({
@@ -73,10 +84,10 @@ export async function POST(req: Request) {
                     name: validated.title,
                     total_amount: validated.amount,
                     monthly_payment: monthlyPayment > 0 ? monthlyPayment : validated.amount,
-                    remaining_installments: 1,
-                    total_installments: 1,
+                    remaining_installments: remainingInstallments,
+                    total_installments: totalInstallments,
                     category: validated.category || 'Deuda',
-                    next_payment_date: validated.due_date,
+                    next_payment_date: nextPaymentDate,
                 })
                 .select()
                 .single();

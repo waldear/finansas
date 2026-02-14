@@ -22,6 +22,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const { id } = await params;
     const context = createRequestContext('/api/documents/jobs/[id]/run', 'POST');
     const startedAt = Date.now();
+    let supabase: any = null;
+    let userId: string | null = null;
 
     try {
         const apiKey = sanitizeEnv(process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYY);
@@ -29,7 +31,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             return NextResponse.json({ error: 'Falta GEMINI_API_KEY en el entorno' }, { status: 500 });
         }
 
-        const supabase = await createClient();
+        supabase = await createClient();
         if (!supabase) {
             return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
         }
@@ -38,6 +40,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+        userId = user.id;
 
         const { data: job, error: jobError } = await supabase
             .from('document_jobs')
@@ -92,11 +95,36 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
         const arrayBuffer = await fileData.arrayBuffer();
         const base64Data = Buffer.from(arrayBuffer).toString('base64');
-        const extractionData = await extractFinancialDocument({
-            apiKey,
-            mimeType: job.mime_type,
-            base64Data,
-        });
+
+        let extractionData: any;
+        try {
+            extractionData = await extractFinancialDocument({
+                apiKey,
+                mimeType: job.mime_type,
+                base64Data,
+            });
+        } catch (extractionError) {
+            const message = extractionError instanceof Error ? extractionError.message : String(extractionError);
+
+            await supabase
+                .from('document_jobs')
+                .update({
+                    status: 'failed',
+                    error_message: message.slice(0, 800),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', job.id)
+                .eq('user_id', user.id);
+
+            return NextResponse.json(
+                {
+                    error: 'El análisis del documento falló.',
+                    details: message,
+                    hint: 'Prueba con una imagen más nítida o un PDF más liviano (menos páginas).',
+                },
+                { status: 500 }
+            );
+        }
 
         const documentType = VALID_DOCUMENT_TYPES.has(extractionData.type) ? extractionData.type : 'other';
         const { data: docData, error: docError } = await supabase
@@ -206,6 +234,23 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             extractionId: extractionRecord.id,
         });
     } catch (error) {
+        // Ensure jobs don't get stuck in processing forever.
+        try {
+            const message = error instanceof Error ? error.message : String(error);
+            if (supabase && userId) {
+                await supabase
+                    .from('document_jobs')
+                    .update({
+                        status: 'failed',
+                        error_message: message.slice(0, 800),
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', id)
+                    .eq('user_id', userId);
+            }
+        } catch {
+            // no-op
+        }
         logError('document_job_run_exception', error, {
             ...context,
             jobId: id,

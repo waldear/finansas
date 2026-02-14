@@ -47,6 +47,10 @@ function formatFileSize(bytes: number) {
     return `${bytes} B`;
 }
 
+function isoToday() {
+    return new Date().toISOString().split('T')[0];
+}
+
 const quickPrompts = [
     'Dame recordatorios de vencimientos de esta semana',
     '¿Qué pagos debería priorizar hoy?',
@@ -63,6 +67,21 @@ type ImportPreviewRow = {
     category: string;
     description: string;
     amount: number;
+};
+
+type ManualStatementForm = {
+    title: string;
+    category: string;
+    amount: string;
+    minimumPayment: string;
+    dueDate: string;
+    createDebt: boolean;
+    monthlyPayment: string;
+    totalInstallments: string;
+    remainingInstallments: string;
+    markPaid: boolean;
+    paymentDate: string;
+    paymentDescription: string;
 };
 
 export default function AssistantPage() {
@@ -82,6 +101,22 @@ export default function AssistantPage() {
     const [importPreviewMeta, setImportPreviewMeta] = useState<any>(null);
     const [isPreparingImport, setIsPreparingImport] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const [isManualStatementOpen, setIsManualStatementOpen] = useState(false);
+    const [isSavingManualStatement, setIsSavingManualStatement] = useState(false);
+    const [manualStatement, setManualStatement] = useState<ManualStatementForm>(() => ({
+        title: '',
+        category: 'Tarjeta',
+        amount: '',
+        minimumPayment: '',
+        dueDate: isoToday(),
+        createDebt: true,
+        monthlyPayment: '',
+        totalInstallments: '1',
+        remainingInstallments: '1',
+        markPaid: false,
+        paymentDate: isoToday(),
+        paymentDescription: '',
+    }));
 
     const attachmentPrompts = [
         { label: 'Resumir', prompt: 'Resumí el documento adjunto en puntos clave y una conclusión.' },
@@ -296,10 +331,30 @@ export default function AssistantPage() {
             };
         }
 
-        await fetch(`/api/documents/jobs/${enqueueBody.jobId}/run`, {
+        const runResponse = await fetch(`/api/documents/jobs/${enqueueBody.jobId}/run`, {
             method: 'POST',
             credentials: 'include',
         });
+
+        const runBody = await runResponse.json().catch(() => null);
+        if (!runResponse.ok) {
+            const composedError = [runBody?.error, runBody?.details, runBody?.hint]
+                .filter(Boolean)
+                .join(' · ');
+            throw new Error(composedError || 'No se pudo iniciar el análisis del documento.');
+        }
+
+        if (runBody?.status === 'completed' && runBody?.data) {
+            if (runBody?.warning) {
+                toast.warning(runBody.warning);
+            }
+            return {
+                sourceName: file.name,
+                mimeType: file.type,
+                sizeBytes: file.size,
+                extraction: runBody.data,
+            };
+        }
 
         for (let attempt = 0; attempt < 45; attempt++) {
             await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -480,6 +535,128 @@ export default function AssistantPage() {
         }
     };
 
+    const resetManualStatement = () => {
+        setManualStatement({
+            title: '',
+            category: 'Tarjeta',
+            amount: '',
+            minimumPayment: '',
+            dueDate: isoToday(),
+            createDebt: true,
+            monthlyPayment: '',
+            totalInstallments: '1',
+            remainingInstallments: '1',
+            markPaid: false,
+            paymentDate: isoToday(),
+            paymentDescription: '',
+        });
+    };
+
+    const handleSaveManualStatement = async () => {
+        const title = manualStatement.title.trim();
+        if (!title) {
+            toast.error('Escribe el nombre de la tarjeta o resumen.');
+            return;
+        }
+
+        const amount = Number(manualStatement.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            toast.error('Saldo total inválido.');
+            return;
+        }
+
+        const due_date = manualStatement.dueDate;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(due_date)) {
+            toast.error('Vencimiento inválido.');
+            return;
+        }
+
+        const category = manualStatement.category.trim() || 'Tarjeta';
+
+        const minimumRaw = manualStatement.minimumPayment.trim();
+        const minimum_payment = minimumRaw ? Number(minimumRaw) : null;
+        if (minimumRaw && (!Number.isFinite(minimum_payment) || (minimum_payment as number) <= 0)) {
+            toast.error('Pago mínimo inválido.');
+            return;
+        }
+
+        const monthlyRaw = manualStatement.monthlyPayment.trim();
+        const monthly_payment = monthlyRaw ? Number(monthlyRaw) : (minimum_payment ?? amount);
+        if (!Number.isFinite(monthly_payment) || monthly_payment <= 0) {
+            toast.error('Pago mensual inválido.');
+            return;
+        }
+
+        const total_installments = Math.max(1, Math.trunc(Number(manualStatement.totalInstallments || 1)));
+        const remainingRaw = manualStatement.remainingInstallments.trim();
+        const remaining_installments = remainingRaw
+            ? Math.min(Math.max(0, Math.trunc(Number(remainingRaw))), total_installments)
+            : total_installments;
+
+        const mark_paid = manualStatement.markPaid;
+        const create_debt = manualStatement.createDebt && !mark_paid;
+        const payment_date = mark_paid && /^\d{4}-\d{2}-\d{2}$/.test(manualStatement.paymentDate)
+            ? manualStatement.paymentDate
+            : mark_paid
+                ? isoToday()
+                : null;
+        const payment_description = manualStatement.paymentDescription.trim() || null;
+
+        setIsSavingManualStatement(true);
+        try {
+            const response = await fetch('/api/copilot/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    title,
+                    amount,
+                    due_date,
+                    category,
+                    minimum_payment,
+                    document_type: 'credit_card',
+                    create_debt,
+                    monthly_payment,
+                    total_installments,
+                    remaining_installments,
+                    debt_next_payment_date: due_date,
+                    mark_paid,
+                    payment_date,
+                    payment_description,
+                }),
+            });
+
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo guardar el resumen.');
+            }
+
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['obligations'] }),
+                queryClient.invalidateQueries({ queryKey: ['debts'] }),
+                queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+                queryClient.invalidateQueries({ queryKey: ['budgets'] }),
+                queryClient.invalidateQueries({ queryKey: ['audit'] }),
+            ]);
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: `Listo. Guardé tu resumen "${title}" con vencimiento ${due_date}.`,
+                },
+            ]);
+
+            toast.success('Resumen cargado correctamente.');
+            setIsManualStatementOpen(false);
+            resetManualStatement();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo guardar el resumen.');
+        } finally {
+            setIsSavingManualStatement(false);
+        }
+    };
+
     const handleSend = async (forcedMessage?: string) => {
         const userMessage = (forcedMessage ?? input).trim();
         const fileToAnalyze = attachedFile;
@@ -534,11 +711,12 @@ export default function AssistantPage() {
                 toast.success(`Se registraron ${data.actionsApplied.length} cambios automáticamente.`);
             }
         } catch (error) {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu solicitud.' }]);
+            const message = error instanceof Error ? error.message : 'No se pudo procesar tu solicitud.';
+            setMessages(prev => [...prev, { role: 'assistant', content: `Lo siento, hubo un error: ${message}`.slice(0, 420) }]);
             if (fileToAnalyze) {
                 setAttachedFile(fileToAnalyze);
             }
-            toast.error(error instanceof Error ? error.message : 'No se pudo procesar el adjunto.');
+            toast.error(message);
         } finally {
             setIsProcessingAttachment(false);
             setIsLoading(false);
@@ -656,6 +834,169 @@ export default function AssistantPage() {
                         onSubmit={(e) => { e.preventDefault(); handleSend(); }}
                         className="space-y-3"
                     >
+                        <div className="rounded-lg border bg-muted/10 px-3 py-2 text-xs">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold">Modo privado (sin adjuntos)</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Para resúmenes de tarjeta: carga saldo, mínimo y vencimiento sin subir el PDF.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsManualStatementOpen((prev) => !prev)}
+                                    disabled={isSavingManualStatement || isLoading || isProcessingAttachment || isImporting}
+                                >
+                                    {isManualStatementOpen ? 'Cerrar' : 'Cargar resumen'}
+                                </Button>
+                            </div>
+
+                            {isManualStatementOpen && (
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                    <Input
+                                        value={manualStatement.title}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, title: event.target.value }))}
+                                        placeholder="Tarjeta / Resumen (ej: Visa Santander)"
+                                        className="h-9 sm:col-span-2"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        value={manualStatement.amount}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, amount: event.target.value }))}
+                                        placeholder="Saldo total"
+                                        className="h-9"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        type="date"
+                                        value={manualStatement.dueDate}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, dueDate: event.target.value }))}
+                                        className="h-9"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        value={manualStatement.minimumPayment}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, minimumPayment: event.target.value }))}
+                                        placeholder="Pago mínimo (opcional)"
+                                        className="h-9"
+                                        disabled={isSavingManualStatement}
+                                    />
+                                    <Input
+                                        value={manualStatement.category}
+                                        onChange={(event) => setManualStatement((prev) => ({ ...prev, category: event.target.value }))}
+                                        placeholder="Categoría (ej: Tarjeta)"
+                                        className="h-9"
+                                        disabled={isSavingManualStatement}
+                                    />
+
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 accent-primary"
+                                            checked={manualStatement.createDebt}
+                                            onChange={(event) => setManualStatement((prev) => ({ ...prev, createDebt: event.target.checked }))}
+                                            disabled={isSavingManualStatement || manualStatement.markPaid}
+                                        />
+                                        Crear deuda (cuotas)
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 accent-primary"
+                                            checked={manualStatement.markPaid}
+                                            onChange={(event) => setManualStatement((prev) => ({ ...prev, markPaid: event.target.checked }))}
+                                            disabled={isSavingManualStatement}
+                                        />
+                                        Ya lo pagué
+                                    </label>
+
+                                    {manualStatement.createDebt && !manualStatement.markPaid && (
+                                        <>
+                                            <Input
+                                                type="number"
+                                                inputMode="decimal"
+                                                step="0.01"
+                                                value={manualStatement.monthlyPayment}
+                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, monthlyPayment: event.target.value }))}
+                                                placeholder="Pago mensual (opcional)"
+                                                className="h-9"
+                                                disabled={isSavingManualStatement}
+                                            />
+                                            <Input
+                                                type="number"
+                                                inputMode="numeric"
+                                                step="1"
+                                                value={manualStatement.totalInstallments}
+                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, totalInstallments: event.target.value }))}
+                                                placeholder="Total de cuotas"
+                                                className="h-9"
+                                                disabled={isSavingManualStatement}
+                                            />
+                                            <Input
+                                                type="number"
+                                                inputMode="numeric"
+                                                step="1"
+                                                value={manualStatement.remainingInstallments}
+                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, remainingInstallments: event.target.value }))}
+                                                placeholder="Cuotas restantes"
+                                                className="h-9"
+                                                disabled={isSavingManualStatement}
+                                            />
+                                            <div className="hidden sm:block" />
+                                        </>
+                                    )}
+
+                                    {manualStatement.markPaid && (
+                                        <>
+                                            <Input
+                                                type="date"
+                                                value={manualStatement.paymentDate}
+                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDate: event.target.value }))}
+                                                className="h-9"
+                                                disabled={isSavingManualStatement}
+                                            />
+                                            <Input
+                                                value={manualStatement.paymentDescription}
+                                                onChange={(event) => setManualStatement((prev) => ({ ...prev, paymentDescription: event.target.value }))}
+                                                placeholder="Descripción del pago (opcional)"
+                                                className="h-9"
+                                                disabled={isSavingManualStatement}
+                                            />
+                                        </>
+                                    )}
+
+                                    <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-1">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => { setIsManualStatementOpen(false); resetManualStatement(); }}
+                                            disabled={isSavingManualStatement}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={handleSaveManualStatement}
+                                            disabled={isSavingManualStatement || isLoading || isProcessingAttachment}
+                                        >
+                                            {isSavingManualStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Guardar resumen
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {attachedFile && (
                             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 text-xs">
                                 <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -710,6 +1051,9 @@ export default function AssistantPage() {
                                         </Button>
                                     ))}
                                 </div>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Privacidad: el archivo se sube y analiza solo cuando eliges una acción. Para resúmenes de tarjeta, puedes usar Modo privado.
+                                </p>
                             </div>
                         )}
 
