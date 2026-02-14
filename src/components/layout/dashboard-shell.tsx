@@ -16,7 +16,6 @@ import {
     Settings,
     Sun,
     UserCircle2,
-    Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase-browser';
@@ -25,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { applyTheme, AppTheme, getStoredTheme } from '@/lib/theme';
 import { AssistantAttachmentProvider } from '@/components/providers/assistant-attachment-provider';
+import { FinFlowLogo } from '@/components/ui/finflow-logo';
 
 function AssistantBrainIcon({ className }: { className?: string }) {
     return (
@@ -189,9 +189,11 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
             </header>
 
             <aside className="fixed bottom-0 left-0 top-0 z-50 hidden w-20 flex-col items-center border-r bg-card py-8 md:flex">
-                <div className="mb-10 text-primary">
-                    <Wallet className="h-8 w-8" />
-                </div>
+                <Link href="/dashboard" title="Finansas">
+                    <div className="mb-10">
+                        <FinFlowLogo className="h-10 w-10" />
+                    </div>
+                </Link>
                 <nav className="flex flex-1 flex-col gap-6">
                     {navItems.map((item) => (
                         <Link key={item.id} href={item.href} title={item.label}>

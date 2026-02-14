@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, UserPlus, LogIn, Wallet, Chrome } from 'lucide-react';
+import { Loader2, Mail, Lock, UserPlus, LogIn, Chrome } from 'lucide-react';
 import { toast } from 'sonner';
+import { FinFlowLogo } from '@/components/ui/finflow-logo';
 
 function formatAuthErrorMessage(message?: string) {
     if (!message) return 'Ocurrió un error de autenticación. Intenta nuevamente.';
@@ -310,9 +311,7 @@ export default function AuthPage() {
         <div className="min-h-screen flex items-center justify-center p-4 bg-background">
             <Card className="w-full max-w-md shadow-xl border-t-4 border-t-primary">
                 <CardHeader className="text-center">
-                    <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                        <Wallet className="h-6 w-6 text-primary" />
-                    </div>
+                    <FinFlowLogo className="mx-auto mb-4 h-16 w-16" />
                     <CardTitle className="text-2xl font-bold tracking-tight">FinFlow</CardTitle>
                     <CardDescription>
                         Gestiona tus finanzas de forma inteligente y fluida
