@@ -10,15 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Brain, Crown, FileImage, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
-
-const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
-const SUPPORTED_ATTACHMENT_TYPES = new Set([
-    'application/pdf',
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'image/webp',
-]);
+import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
+import {
+    MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES,
+    SUPPORTED_ASSISTANT_ATTACHMENT_TYPES,
+} from '@/lib/assistant-attachments';
 
 type AssistantDocumentContext = {
     sourceName: string;
@@ -63,6 +59,7 @@ const quickPrompts = [
 export default function AssistantPage() {
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const { consumePendingFile } = useAssistantAttachment();
     const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -72,6 +69,13 @@ export default function AssistantPage() {
     const [billing, setBilling] = useState<AssistantBilling | null>(null);
     const [isStartingCheckout, setIsStartingCheckout] = useState(false);
     const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+
+    const attachmentPrompts = [
+        { label: 'Resumir', prompt: 'Resumí el documento adjunto en puntos clave y una conclusión.' },
+        { label: 'Gastos y categorías', prompt: 'Del documento adjunto, detectá los gastos principales, categorizalos y sugerí 3 recortes.' },
+        { label: 'Vencimientos', prompt: 'Del documento adjunto, identificá vencimientos, cuotas o suscripciones y recomendame recordatorios.' },
+        { label: 'Movimientos raros', prompt: 'Revisá el documento adjunto y marcá movimientos raros, duplicados o inconsistencias.' },
+    ];
 
     const loadBilling = useCallback(async () => {
         try {
@@ -133,6 +137,23 @@ export default function AssistantPage() {
     useEffect(() => {
         void loadBilling();
     }, [loadBilling]);
+
+    useEffect(() => {
+        const pending = consumePendingFile();
+        if (!pending) return;
+
+        if (!SUPPORTED_ASSISTANT_ATTACHMENT_TYPES.has(pending.type)) {
+            toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
+            return;
+        }
+
+        if (pending.size > MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES) {
+            toast.error('El archivo supera 10MB. Sube uno más liviano.');
+            return;
+        }
+
+        setAttachedFile(pending);
+    }, [consumePendingFile]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -284,13 +305,13 @@ export default function AssistantPage() {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        if (!SUPPORTED_ATTACHMENT_TYPES.has(file.type)) {
+        if (!SUPPORTED_ASSISTANT_ATTACHMENT_TYPES.has(file.type)) {
             toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
             event.target.value = '';
             return;
         }
 
-        if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        if (file.size > MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES) {
             toast.error('El archivo supera 10MB. Sube uno más liviano.');
             event.target.value = '';
             return;
@@ -498,6 +519,27 @@ export default function AssistantPage() {
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </Button>
+                            </div>
+                        )}
+
+                        {attachedFile && (
+                            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                                <p className="font-medium">¿Qué querés hacer con el adjunto?</p>
+                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    {attachmentPrompts.map((item) => (
+                                        <Button
+                                            key={item.label}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
+                                            onClick={() => handleSend(item.prompt)}
+                                            disabled={isLoading || isProcessingAttachment}
+                                        >
+                                            {item.label}
+                                        </Button>
+                                    ))}
+                                </div>
                             </div>
                         )}
 

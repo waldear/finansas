@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDashboard } from '@/hooks/use-dashboard';
 import { usePlanning } from '@/hooks/use-planning';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,24 +13,34 @@ import {
     Wallet,
     Plus,
     ArrowUpRight,
-    MoreHorizontal,
     ArrowDownLeft,
     PieChart,
     Activity,
     AlertTriangle,
+    Paperclip,
+    StickyNote,
     Eye,
     EyeOff
 } from 'lucide-react';
 import { DashboardSkeleton } from '@/components/layout/dashboard-skeleton';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
+import {
+    MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES,
+    SUPPORTED_ASSISTANT_ATTACHMENT_TYPES,
+} from '@/lib/assistant-attachments';
 
 const NET_WORTH_VISIBILITY_KEY = 'finansas-net-worth-visible';
 
 export default function DashboardPage() {
+    const router = useRouter();
     const { debts, transactions, isLoading } = useDashboard();
     const { budgets, recurringTransactions, runRecurring } = usePlanning();
     const recurringRanRef = useRef(false);
+    const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+    const { setPendingFile } = useAssistantAttachment();
     const [isNetWorthVisible, setIsNetWorthVisible] = useState(true);
 
     // Memoize expensive calculations
@@ -148,12 +159,40 @@ export default function DashboardPage() {
         }).format(amount);
     };
 
+    const handleAttachmentSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!SUPPORTED_ASSISTANT_ATTACHMENT_TYPES.has(file.type)) {
+            toast.error('Formato no soportado. Usa PDF, JPG, PNG o WEBP.');
+            event.target.value = '';
+            return;
+        }
+
+        if (file.size > MAX_ASSISTANT_ATTACHMENT_SIZE_BYTES) {
+            toast.error('El archivo supera 10MB. Sube uno más liviano.');
+            event.target.value = '';
+            return;
+        }
+
+        setPendingFile(file);
+        event.target.value = '';
+        router.push('/dashboard/assistant');
+    };
+
     const actionButtons = [
-        { label: 'Ingresar', icon: Plus, color: 'bg-emerald-500', href: '/dashboard/transactions' },
-        { label: 'Gastar', icon: ArrowUpRight, color: 'bg-red-500', href: '/dashboard/transactions' },
-        { label: 'Copiloto', icon: Activity, color: 'bg-blue-500', href: '/dashboard/copilot' },
-        { label: 'Auditoría', icon: MoreHorizontal, color: 'bg-zinc-700', href: '/dashboard/audit' },
-    ];
+        { id: 'income', label: 'Ingresar', icon: Plus, color: 'bg-emerald-500', href: '/dashboard/transactions' },
+        { id: 'expense', label: 'Gastar', icon: ArrowUpRight, color: 'bg-red-500', href: '/dashboard/transactions' },
+        {
+            id: 'copilot',
+            label: 'Copiloto',
+            icon: Paperclip,
+            color: 'bg-blue-500',
+            onClick: () => attachmentInputRef.current?.click(),
+            ariaLabel: 'Adjuntar extracto, resumen o foto para el asistente',
+        },
+        { id: 'audit', label: 'Auditoría', icon: StickyNote, color: 'bg-zinc-700', href: '/dashboard/audit' },
+    ] as const;
 
     if (isLoading) {
         return <DashboardSkeleton />;
@@ -195,16 +234,39 @@ export default function DashboardPage() {
 
             {/* QUICK ACTIONS */}
             <div className="flex justify-between px-2 max-w-md mx-auto w-full">
+                <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={handleAttachmentSelection}
+                    className="hidden"
+                    title="Seleccionar archivo"
+                />
                 {actionButtons.map((btn) => (
                     <div key={btn.label} className="flex flex-col items-center gap-2">
-                        <Link href={btn.href}>
-                            <div className={cn(
-                                "h-16 w-16 rounded-full flex items-center justify-center text-white transition-all shadow-xl hover:scale-110 active:scale-90",
-                                btn.color
-                            )}>
+                        {'href' in btn ? (
+                            <Link href={btn.href}>
+                                <div className={cn(
+                                    "h-16 w-16 rounded-full flex items-center justify-center text-white transition-all shadow-xl hover:scale-110 active:scale-90",
+                                    btn.color
+                                )}>
+                                    <btn.icon className="h-8 w-8" />
+                                </div>
+                            </Link>
+                        ) : (
+                            <button
+                                type="button"
+                                className={cn(
+                                    "h-16 w-16 rounded-full flex items-center justify-center text-white transition-all shadow-xl hover:scale-110 active:scale-90",
+                                    btn.color
+                                )}
+                                onClick={btn.onClick}
+                                aria-label={btn.ariaLabel}
+                                title={btn.ariaLabel}
+                            >
                                 <btn.icon className="h-8 w-8" />
-                            </div>
-                        </Link>
+                            </button>
+                        )}
                         <span className="text-xs font-bold text-muted-foreground">{btn.label}</span>
                     </div>
                 ))}

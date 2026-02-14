@@ -24,6 +24,7 @@ import { NotificationCenter } from '@/components/layout/notification-center';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { applyTheme, AppTheme, getStoredTheme } from '@/lib/theme';
+import { AssistantAttachmentProvider } from '@/components/providers/assistant-attachment-provider';
 
 function AssistantBrainIcon({ className }: { className?: string }) {
     return (
@@ -44,7 +45,7 @@ const navItems = [
     { id: 'profile', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
 ];
 
-export default function DashboardShell({ children }: { children: React.ReactNode }) {
+function DashboardShellInner({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const queryClient = useQueryClient();
     const [user, setUser] = useState<any>(null);
@@ -257,5 +258,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </nav>
             </div>
         </div>
+    );
+}
+
+export default function DashboardShell({ children }: { children: React.ReactNode }) {
+    return (
+        <AssistantAttachmentProvider>
+            <DashboardShellInner>{children}</DashboardShellInner>
+        </AssistantAttachmentProvider>
     );
 }
