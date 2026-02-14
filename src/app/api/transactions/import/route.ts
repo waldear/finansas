@@ -125,6 +125,9 @@ export async function POST(req: Request) {
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await req.json().catch(() => null);
+        const source = typeof body?.source === 'string' && body.source.trim()
+            ? body.source.trim().slice(0, 40)
+            : 'excel';
         const rawRows = Array.isArray(body?.rows) ? body.rows.slice(0, MAX_IMPORT_ROWS) : [];
 
         if (rawRows.length === 0) {
@@ -171,7 +174,7 @@ export async function POST(req: Request) {
             entityId: String(Date.now()),
             action: 'system',
             metadata: {
-                source: 'excel',
+                source,
                 imported: insertedRows?.length || 0,
                 skipped,
             },

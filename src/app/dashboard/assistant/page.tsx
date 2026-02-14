@@ -1,13 +1,13 @@
 'use client';
 
 export const dynamic = 'force-dynamic';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { Brain, Crown, FileImage, FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
+import { Brain, Crown, FileImage, FileText, Loader2, Paperclip, Send, Trash2, X } from 'lucide-react';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 import { toast } from 'sonner';
 import { useAssistantAttachment } from '@/components/providers/assistant-attachment-provider';
@@ -56,6 +56,15 @@ const quickPrompts = [
     '/ingreso 320000 salario',
 ];
 
+type ImportPreviewRow = {
+    id: string;
+    date: string;
+    type: 'income' | 'expense';
+    category: string;
+    description: string;
+    amount: number;
+};
+
 export default function AssistantPage() {
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -69,6 +78,10 @@ export default function AssistantPage() {
     const [billing, setBilling] = useState<AssistantBilling | null>(null);
     const [isStartingCheckout, setIsStartingCheckout] = useState(false);
     const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+    const [importPreviewRows, setImportPreviewRows] = useState<ImportPreviewRow[] | null>(null);
+    const [importPreviewMeta, setImportPreviewMeta] = useState<any>(null);
+    const [isPreparingImport, setIsPreparingImport] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     const attachmentPrompts = [
         { label: 'Resumir', prompt: 'Resumí el documento adjunto en puntos clave y una conclusión.' },
@@ -76,6 +89,18 @@ export default function AssistantPage() {
         { label: 'Vencimientos', prompt: 'Del documento adjunto, identificá vencimientos, cuotas o suscripciones y recomendame recordatorios.' },
         { label: 'Movimientos raros', prompt: 'Revisá el documento adjunto y marcá movimientos raros, duplicados o inconsistencias.' },
     ];
+
+    const importTotals = useMemo(() => {
+        const rows = importPreviewRows || [];
+        const income = rows.filter((r) => r.type === 'income').reduce((acc, r) => acc + Number(r.amount || 0), 0);
+        const expense = rows.filter((r) => r.type === 'expense').reduce((acc, r) => acc + Number(r.amount || 0), 0);
+        return {
+            count: rows.length,
+            income,
+            expense,
+            balance: income - expense,
+        };
+    }, [importPreviewRows]);
 
     const loadBilling = useCallback(async () => {
         try {
@@ -154,6 +179,12 @@ export default function AssistantPage() {
 
         setAttachedFile(pending);
     }, [consumePendingFile]);
+
+    useEffect(() => {
+        // Reset any pending import preview when changing/clearing the attachment.
+        setImportPreviewRows(null);
+        setImportPreviewMeta(null);
+    }, [attachedFile?.name, attachedFile?.size, attachedFile?.type]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -319,6 +350,134 @@ export default function AssistantPage() {
 
         setAttachedFile(file);
         event.target.value = '';
+    };
+
+    const handlePrepareImport = async () => {
+        if (!attachedFile) return;
+
+        setIsPreparingImport(true);
+        try {
+            setIsProcessingAttachment(true);
+            const documentContext = await processAttachedDocument(attachedFile);
+            const response = await fetch('/api/transactions/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    extraction: documentContext.extraction,
+                    maxRows: 120,
+                }),
+            });
+
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo generar el preview de importación.');
+            }
+
+            const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+            if (!rows.length) {
+                const warning = Array.isArray(payload?.warnings) ? payload.warnings[0] : null;
+                toast.info(warning || 'No se detectaron movimientos en el adjunto.');
+                setImportPreviewRows([]);
+                setImportPreviewMeta(payload?.meta ?? null);
+                return;
+            }
+
+            const hydratedRows: ImportPreviewRow[] = rows
+                .slice(0, 250)
+                .map((row: any): ImportPreviewRow => ({
+                    id: (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`) as string,
+                    date: typeof row?.date === 'string' ? row.date : new Date().toISOString().split('T')[0],
+                    type: row?.type === 'income' ? 'income' as const : 'expense' as const,
+                    category: typeof row?.category === 'string' ? row.category : 'General',
+                    description: typeof row?.description === 'string' ? row.description : 'Movimiento importado',
+                    amount: Number(row?.amount || 0),
+                }))
+                .filter((row: ImportPreviewRow) => row.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(row.date));
+
+            setImportPreviewRows(hydratedRows);
+            setImportPreviewMeta(payload?.meta ?? null);
+            toast.success(`Preview listo: ${hydratedRows.length} movimientos detectados.`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo preparar la importación.');
+        } finally {
+            setIsProcessingAttachment(false);
+            setIsPreparingImport(false);
+        }
+    };
+
+    const updateImportRow = (rowId: string, changes: Partial<Omit<ImportPreviewRow, 'id'>>) => {
+        setImportPreviewRows((prev) => {
+            if (!prev) return prev;
+            return prev.map((row) => row.id === rowId ? { ...row, ...changes } : row);
+        });
+    };
+
+    const removeImportRow = (rowId: string) => {
+        setImportPreviewRows((prev) => {
+            if (!prev) return prev;
+            return prev.filter((row) => row.id !== rowId);
+        });
+    };
+
+    const cancelImportPreview = () => {
+        setImportPreviewRows(null);
+        setImportPreviewMeta(null);
+    };
+
+    const confirmImport = async () => {
+        const rows = (importPreviewRows || [])
+            .map((row) => ({
+                date: String(row.date || '').trim(),
+                type: row.type,
+                category: String(row.category || '').trim(),
+                description: String(row.description || '').trim(),
+                amount: Number(row.amount || 0),
+            }))
+            .filter((row) => row.amount > 0 && row.description && row.category && /^\d{4}-\d{2}-\d{2}$/.test(row.date));
+
+        if (!rows.length) {
+            toast.info('No hay filas válidas para importar.');
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            const response = await fetch('/api/transactions/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    source: 'document',
+                    rows,
+                }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo importar.');
+            }
+
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+                queryClient.invalidateQueries({ queryKey: ['audit'] }),
+                queryClient.invalidateQueries({ queryKey: ['budgets'] }),
+            ]);
+
+            cancelImportPreview();
+            setAttachedFile(null);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: `Listo. Importé ${payload?.imported ?? rows.length} movimientos desde tu adjunto.`,
+                },
+            ]);
+            toast.success(`Importación lista: ${payload?.imported ?? rows.length} movimientos cargados${payload?.skipped ? `, ${payload.skipped} omitidos` : ''}.`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'No se pudo importar.');
+        } finally {
+            setIsImporting(false);
+        }
     };
 
     const handleSend = async (forcedMessage?: string) => {
@@ -526,6 +685,17 @@ export default function AssistantPage() {
                             <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
                                 <p className="font-medium">¿Qué querés hacer con el adjunto?</p>
                                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
+                                        onClick={handlePrepareImport}
+                                        disabled={isLoading || isProcessingAttachment || isPreparingImport || isImporting}
+                                    >
+                                        {isPreparingImport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Importar movimientos (preview)
+                                    </Button>
                                     {attachmentPrompts.map((item) => (
                                         <Button
                                             key={item.label}
@@ -534,10 +704,104 @@ export default function AssistantPage() {
                                             size="sm"
                                             className="h-auto w-full justify-start whitespace-normal text-left text-xs leading-snug"
                                             onClick={() => handleSend(item.prompt)}
-                                            disabled={isLoading || isProcessingAttachment}
+                                            disabled={isLoading || isProcessingAttachment || isPreparingImport || isImporting}
                                         >
                                             {item.label}
                                         </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {importPreviewRows && (
+                            <div className="rounded-xl border bg-muted/10 p-3 text-xs space-y-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-semibold">Preview de importación</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {importTotals.count} movimientos · Ingresos {importTotals.income.toFixed(0)} · Gastos {importTotals.expense.toFixed(0)} · Balance {importTotals.balance.toFixed(0)}
+                                            {Number(importPreviewMeta?.usdRateUsed) > 0 ? ` · TC USD ${Number(importPreviewMeta.usdRateUsed).toFixed(2)}` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={cancelImportPreview}
+                                            disabled={isImporting || isLoading || isProcessingAttachment}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={confirmImport}
+                                            disabled={isImporting || isLoading || isProcessingAttachment || importPreviewRows.length === 0}
+                                        >
+                                            {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                            Importar {importPreviewRows.length}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="max-h-[40vh] space-y-2 overflow-auto pr-1">
+                                    {importPreviewRows.map((row) => (
+                                        <div key={row.id} className="rounded-lg border bg-background/40 p-2">
+                                            <div className="grid gap-2 sm:grid-cols-[8.5rem_7rem_1fr_1fr_8.5rem_auto] sm:items-center">
+                                                <Input
+                                                    type="date"
+                                                    value={row.date}
+                                                    onChange={(event) => updateImportRow(row.id, { date: event.target.value })}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    className="h-9"
+                                                />
+                                                <select
+                                                    value={row.type}
+                                                    onChange={(event) => updateImportRow(row.id, { type: event.target.value === 'income' ? 'income' : 'expense' })}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                                                >
+                                                    <option value="expense">Gasto</option>
+                                                    <option value="income">Ingreso</option>
+                                                </select>
+                                                <Input
+                                                    value={row.description}
+                                                    onChange={(event) => updateImportRow(row.id, { description: event.target.value })}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    className="h-9"
+                                                    placeholder="Descripción"
+                                                />
+                                                <Input
+                                                    value={row.category}
+                                                    onChange={(event) => updateImportRow(row.id, { category: event.target.value })}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    className="h-9"
+                                                    placeholder="Categoría"
+                                                />
+                                                <Input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    step="0.01"
+                                                    value={Number.isFinite(Number(row.amount)) ? String(row.amount) : ''}
+                                                    onChange={(event) => updateImportRow(row.id, { amount: Number(event.target.value || 0) })}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    className="h-9"
+                                                    placeholder="Monto"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-9 w-9"
+                                                    onClick={() => removeImportRow(row.id)}
+                                                    disabled={isImporting || isLoading || isProcessingAttachment}
+                                                    title="Quitar fila"
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                                </Button>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
