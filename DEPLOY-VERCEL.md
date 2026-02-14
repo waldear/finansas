@@ -1,42 +1,37 @@
-# 🚀 Deploy en Vercel - Instrucciones
+# Deploy en Vercel (Next.js)
 
-## Paso 1: Crear cuenta
+Esta app es **Next.js (App Router)**. Vercel la detecta sola.
+
+## 1) Crear el proyecto
 1. Ir a https://vercel.com
-2. Click "Sign Up"
-3. Elegir "Continue with Email"
-4. Completar datos y verificar email
+2. "Add New..." -> "Project"
+3. Importar el repo (GitHub) donde esta este proyecto
 
-## Paso 2: Crear proyecto
-1. En el dashboard de Vercel, click "Add New..." → "Project"
-2. Elegir la pestaña "Import Git Repository"
-3. Como NO usamos Git, hacemos clic en "Upload" o arrastramos archivos
+## 2) Variables de entorno (IMPORTANTE)
+En Vercel -> Project -> Settings -> Environment Variables, definir:
 
-## Paso 3: Subir archivos
-Subir TODA la carpeta `mi-control-financiero` (comprimida en zip o arrastrando)
-
-## Paso 4: Configurar
-- **Framework Preset**: Vite
-- **Root Directory**: `app`
-- **Build Command**: `npm run build`
-- **Output Directory**: `dist`
-
-## Paso 5: Variables de entorno (IMPORTANTE)
-Agregar estas 3 variables:
-
-```
-VITE_SUPABASE_URL=https://xtalkkbvyylwywzzafcc.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_WR7AC0_eJkA-SpSC6ua8kA_RQytXduZ
-VITE_GEMINI_API_KEY=AIzaSyAikwJNXtQNpcEBgz7-80T2ruY9hjQ_Ew4
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://TU_PROYECTO.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="TU_SUPABASE_ANON_KEY"
+GEMINI_API_KEY="TU_GEMINI_API_KEY"
+NEXT_PUBLIC_SITE_URL="https://TU_DOMINIO_EN_VERCEL"
 ```
 
-## Paso 6: Deploy
-Click en "Deploy" y esperar 2-3 minutos.
+Opcional (recomendado):
 
-## Paso 7: Listo!
-Vercel te dará una URL como:
-`https://mi-control-financiero-xxx.vercel.app`
+```bash
+GEMINI_MODEL="gemini-2.5-flash"
+ASSISTANT_FREE_MONTHLY_REQUEST_LIMIT="40"
+ASSISTANT_PRO_MONTHLY_REQUEST_LIMIT="1200"
+```
 
-## Para acceder desde el celular
-1. Abrir Chrome/Safari en el teléfono
-2. Ir a la URL de Vercel
-3. Agregar a pantalla de inicio para usar como app
+Nota: `GEMINI_API_KEY` debe ser server-only (no usar `NEXT_PUBLIC_`).
+
+## 3) Deploy
+1. Deploy
+2. Esperar que finalice el build
+3. Probar la app en la URL que entrega Vercel
+
+## Seguridad
+- No pegues keys reales en archivos del repo.
+- Si una key se compartio por chat o quedo en Git, rotala y reemplazala en Vercel.
