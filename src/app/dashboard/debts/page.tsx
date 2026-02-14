@@ -7,6 +7,7 @@ import { DebtInput } from '@/lib/schemas';
 import { useFinance } from '@/hooks/use-finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DebtForm } from '@/components/finance/debt-form';
+import { Label } from '@/components/ui/label';
 import {
     Loader2,
     CreditCard,
@@ -21,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 
 const emptyDebtInput: DebtInput = {
     name: '',
@@ -31,6 +33,35 @@ const emptyDebtInput: DebtInput = {
     total_installments: 1,
     next_payment_date: new Date().toISOString().split('T')[0],
 };
+
+function isoToday() {
+    return new Date().toISOString().split('T')[0];
+}
+
+function parseMoneyInput(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const stripped = trimmed.replace(/[^\d,.-]/g, '');
+    if (!stripped) return null;
+
+    const hasComma = stripped.includes(',');
+    const hasDot = stripped.includes('.');
+    let normalized = stripped;
+
+    if (hasComma && hasDot) {
+        if (stripped.lastIndexOf(',') > stripped.lastIndexOf('.')) {
+            normalized = stripped.replace(/\./g, '').replace(',', '.');
+        } else {
+            normalized = stripped.replace(/,/g, '');
+        }
+    } else if (hasComma) {
+        normalized = stripped.replace(',', '.');
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+}
 
 function toDebtInput(debt: any): DebtInput {
     return {
@@ -44,11 +75,24 @@ function toDebtInput(debt: any): DebtInput {
     };
 }
 
+type PaymentDraft = {
+    debtId: string;
+    debtName: string;
+    debtCategory: string;
+    totalAmount: number;
+    monthlyPayment: number;
+    paymentAmount: string;
+    paymentDate: string;
+    description: string;
+};
+
 export default function DebtsPage() {
     const [processingDebtId, setProcessingDebtId] = useState<string | null>(null);
     const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
     const [targetDebtId, setTargetDebtId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<DebtInput>(emptyDebtInput);
+    const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
+    const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
 
     const {
         debts,
@@ -95,10 +139,55 @@ export default function DebtsPage() {
         return { label: `Vence en ${diff} día(s)`, className: 'text-muted-foreground' };
     };
 
-    const handleConfirmPayment = async (debtId: string) => {
-        setProcessingDebtId(debtId);
+    const openPaymentSheet = (debt: any) => {
+        if (!debt?.id) {
+            toast.error('No se puede confirmar el pago de esta deuda.');
+            return;
+        }
+
+        const totalAmount = Number(debt.total_amount || 0);
+        const monthlyPayment = Number(debt.monthly_payment || 0);
+        const suggested = monthlyPayment > 0 ? monthlyPayment : totalAmount;
+
+        setPaymentDraft({
+            debtId: String(debt.id),
+            debtName: String(debt.name || 'Deuda'),
+            debtCategory: String(debt.category || 'Deudas'),
+            totalAmount,
+            monthlyPayment,
+            paymentAmount: suggested > 0 ? String(suggested) : '',
+            paymentDate: isoToday(),
+            description: '',
+        });
+        setIsPaymentSheetOpen(true);
+    };
+
+    const closePaymentSheet = () => {
+        setIsPaymentSheetOpen(false);
+        setPaymentDraft(null);
+    };
+
+    const handleConfirmPayment = async () => {
+        if (!paymentDraft) return;
+
+        const parsedAmount = parseMoneyInput(paymentDraft.paymentAmount);
+        if (!parsedAmount || parsedAmount <= 0) {
+            toast.error('Monto de pago inválido.');
+            return;
+        }
+
+        const paymentDate = paymentDraft.paymentDate || isoToday();
+        const description = paymentDraft.description.trim() || undefined;
+
+        setProcessingDebtId(paymentDraft.debtId);
         try {
-            await confirmDebtPayment({ debtId });
+            await confirmDebtPayment({
+                debtId: paymentDraft.debtId,
+                paymentAmount: parsedAmount,
+                paymentDate,
+                description,
+            });
+            closePaymentSheet();
         } finally {
             setProcessingDebtId(null);
         }
@@ -177,7 +266,7 @@ export default function DebtsPage() {
                                     const totalAmount = Number(debt.total_amount || 0);
                                     const monthlyPayment = Number(debt.monthly_payment || 0);
                                     const remainingInstallments = Number(debt.remaining_installments || 0);
-                                    const isSettled = totalAmount <= 0 || remainingInstallments <= 0;
+                                    const isSettled = totalAmount <= 0;
                                     const isProcessingPayment = isConfirmingDebtPayment && processingDebtId === debt.id;
                                     const dueBadge = getDueBadge(String(debt.next_payment_date));
                                     const isEditing = editingDebtId === debt.id;
@@ -221,7 +310,7 @@ export default function DebtsPage() {
                                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                                 <Button
                                                     type="button"
-                                                    onClick={() => debt.id && handleConfirmPayment(debt.id)}
+                                                    onClick={() => openPaymentSheet(debt)}
                                                     disabled={!debt.id || isProcessingPayment || isConfirmingDebtPayment || isSettled || isMutating}
                                                     className="w-full sm:flex-1 sm:min-w-0"
                                                     variant={isSettled ? 'secondary' : 'default'}
@@ -347,6 +436,112 @@ export default function DebtsPage() {
                 </Card>
             </div>
             {debtsError && <p className="text-sm text-destructive">Error de deudas: {debtsError}</p>}
+
+            <Sheet open={isPaymentSheetOpen} onOpenChange={(open) => (open ? setIsPaymentSheetOpen(true) : closePaymentSheet())}>
+                <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+                    <SheetHeader>
+                        <SheetTitle>Confirmar pago</SheetTitle>
+                        <SheetDescription>
+                            {paymentDraft ? `${paymentDraft.debtName} · ${paymentDraft.debtCategory}` : 'Selecciona una deuda para confirmar el pago.'}
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    {paymentDraft && (
+                        <div className="mt-5 space-y-4">
+                            <div className="rounded-lg border bg-muted/10 p-3 text-xs">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p>
+                                        Saldo pendiente: <span className="font-semibold">{formatCurrency(paymentDraft.totalAmount)}</span>
+                                    </p>
+                                    {paymentDraft.monthlyPayment > 0 ? (
+                                        <p className="text-muted-foreground">
+                                            Cuota sugerida: {formatCurrency(paymentDraft.monthlyPayment)}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="payment_amount">Monto de pago</Label>
+                                    <Input
+                                        id="payment_amount"
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        value={paymentDraft.paymentAmount}
+                                        onChange={(event) => setPaymentDraft((prev) => prev ? ({ ...prev, paymentAmount: event.target.value }) : prev)}
+                                        placeholder="Ej: 45000"
+                                        className="h-10"
+                                        onFocus={(event) => event.currentTarget.select()}
+                                    />
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        {paymentDraft.monthlyPayment > 0 ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setPaymentDraft((prev) => prev ? ({ ...prev, paymentAmount: String(prev.monthlyPayment) }) : prev)}
+                                            >
+                                                Usar cuota
+                                            </Button>
+                                        ) : null}
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setPaymentDraft((prev) => prev ? ({ ...prev, paymentAmount: String(prev.totalAmount) }) : prev)}
+                                        >
+                                            Usar total
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="payment_date">Fecha del débito</Label>
+                                    <Input
+                                        id="payment_date"
+                                        type="date"
+                                        value={paymentDraft.paymentDate}
+                                        onChange={(event) => setPaymentDraft((prev) => prev ? ({ ...prev, paymentDate: event.target.value }) : prev)}
+                                        className="h-10"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5 sm:col-span-2">
+                                    <Label htmlFor="payment_description">Descripción (opcional)</Label>
+                                    <Input
+                                        id="payment_description"
+                                        value={paymentDraft.description}
+                                        onChange={(event) => setPaymentDraft((prev) => prev ? ({ ...prev, description: event.target.value }) : prev)}
+                                        placeholder={`Pago de deuda: ${paymentDraft.debtName}`}
+                                        className="h-10"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap justify-end gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={closePaymentSheet}
+                                    disabled={isConfirmingDebtPayment}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={handleConfirmPayment}
+                                    disabled={isConfirmingDebtPayment}
+                                >
+                                    {isConfirmingDebtPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Confirmar pago
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }

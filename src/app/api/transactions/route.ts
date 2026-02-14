@@ -18,7 +18,9 @@ export async function GET() {
             .from('transactions')
             .select('*')
             .eq('user_id', session.user.id)
-            .order('date', { ascending: false });
+            .order('date', { ascending: false })
+            // Tie-breaker so "Actividad Reciente" shows the newest record when multiple share the same date.
+            .order('created_at', { ascending: false });
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -137,9 +137,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const currentMonthlyPayment = Number(debt.monthly_payment || 0);
         const currentRemainingInstallments = Number(debt.remaining_installments || 0);
 
-        if (currentTotalAmount <= 0 || currentRemainingInstallments <= 0) {
+        if (currentTotalAmount <= 0) {
             return NextResponse.json({ error: 'Esta deuda ya está saldada.' }, { status: 409 });
         }
+
+        const effectiveRemainingInstallments = currentRemainingInstallments > 0 ? currentRemainingInstallments : 1;
 
         const fallbackPayment = currentMonthlyPayment > 0 ? currentMonthlyPayment : currentTotalAmount;
         const requestedPayment = Number(body?.payment_amount ?? fallbackPayment);
@@ -149,9 +151,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
         const paymentAmount = Math.min(requestedPayment, currentTotalAmount);
         const updatedTotalAmount = Math.max(currentTotalAmount - paymentAmount, 0);
-        const updatedRemainingInstallments = Math.max(currentRemainingInstallments - 1, 0);
+
+        // Keep the debt "alive" until the outstanding amount is fully paid.
+        // This avoids marking the debt as settled when the last planned installment was paid partially.
+        let updatedRemainingInstallments = Math.max(effectiveRemainingInstallments - 1, 0);
+        if (updatedTotalAmount > 0 && updatedRemainingInstallments === 0) {
+            updatedRemainingInstallments = 1;
+        }
+
         const updatedNextPaymentDate =
-            updatedTotalAmount > 0 && updatedRemainingInstallments > 0
+            updatedTotalAmount > 0
                 ? addMonth(toIsoDate(String(debt.next_payment_date)))
                 : paymentDate;
 
@@ -222,14 +231,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         );
 
         if (matchedObligation?.id) {
-            const { error: obligationUpdateError } = await supabase
-                .from('obligations')
-                .update({ status: 'paid' })
-                .eq('id', matchedObligation.id)
-                .eq('user_id', session.user.id);
+            // Only mark an obligation as paid when the payment covers (almost) the full obligation amount.
+            // For credit card statements, users often pay partial/minimum payments, and we must not close the obligation.
+            const obligationAmount = toNumericAmount(matchedObligation.amount);
+            const isFullPaymentForObligation = obligationAmount > 0 && paymentAmount >= obligationAmount * 0.98;
 
-            if (!obligationUpdateError) {
-                matchedObligationId = matchedObligation.id;
+            if (isFullPaymentForObligation) {
+                const { error: obligationUpdateError } = await supabase
+                    .from('obligations')
+                    .update({ status: 'paid' })
+                    .eq('id', matchedObligation.id)
+                    .eq('user_id', session.user.id);
+
+                if (!obligationUpdateError) {
+                    matchedObligationId = matchedObligation.id;
+                }
             }
         }
 
