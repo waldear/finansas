@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { RecurringTransactionInputSchema } from '@/lib/schemas';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 function isMissingRecurringTableError(message?: string | null) {
     if (!message) return false;
@@ -21,10 +22,12 @@ export async function GET() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data, error } = await supabase
             .from('recurring_transactions')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .order('next_run', { ascending: true });
 
         if (error) {
@@ -67,6 +70,8 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const payload = await req.json();
         const validated = RecurringTransactionInputSchema.parse(payload);
 
@@ -75,6 +80,7 @@ export async function POST(req: Request) {
             .insert({
                 ...validated,
                 user_id: session.user.id,
+                space_id: activeSpaceId,
                 next_run: validated.next_run || validated.start_date,
             })
             .select()
@@ -93,6 +99,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'recurring_transaction',
             entityId: data.id,
             action: 'create',

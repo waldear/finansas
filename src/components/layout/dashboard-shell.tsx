@@ -8,6 +8,7 @@ import {
     BarChart3,
     Brain,
     Bot,
+    CalendarDays,
     CreditCard,
     Home,
     LogOut,
@@ -26,6 +27,8 @@ import { applyTheme, AppTheme, getStoredTheme } from '@/lib/theme';
 import { AssistantAttachmentProvider } from '@/components/providers/assistant-attachment-provider';
 import { AppLockProvider } from '@/components/providers/app-lock-provider';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
+import { SpaceProvider } from '@/components/providers/space-provider';
+import { SpaceSwitcher } from '@/components/layout/space-switcher';
 
 function AssistantBrainIcon({ className }: { className?: string }) {
     return (
@@ -40,7 +43,7 @@ function AssistantBrainIcon({ className }: { className?: string }) {
 
 const navItems = [
     { id: 'dashboard', label: 'Home', icon: Home, href: '/dashboard' },
-    { id: 'charts', label: 'Stats', icon: BarChart3, href: '/dashboard/charts' },
+    { id: 'calendar', label: 'Agenda', icon: CalendarDays, href: '/dashboard/calendar' },
     { id: 'action', label: 'Asistente', icon: AssistantBrainIcon, href: '/dashboard/assistant', isAction: true },
     { id: 'debts', label: 'Cards', icon: CreditCard, href: '/dashboard/debts' },
     { id: 'profile', label: 'Metas', icon: PiggyBank, href: '/dashboard/savings' },
@@ -155,6 +158,13 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
                                         <UserCircle2 className="h-4 w-4" />
                                         Mi perfil
                                     </Link>
+                                    <Link
+                                        href="/dashboard/charts"
+                                        className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted"
+                                    >
+                                        <BarChart3 className="h-4 w-4" />
+                                        Stats
+                                    </Link>
                                 </div>
 
                                 <div className="space-y-3 p-4">
@@ -200,6 +210,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
                         <div className="min-w-0">
                             <p className="text-xs font-medium text-muted-foreground">Hola de nuevo,</p>
                             <h2 className="truncate text-lg font-bold tracking-tight">{userNick}</h2>
+                            <SpaceSwitcher className="mt-1" />
                         </div>
                     </div>
 
@@ -288,7 +299,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     return (
         <AssistantAttachmentProvider>
             <AppLockProvider>
-                <DashboardShellInner>{children}</DashboardShellInner>
+                <SpaceProvider>
+                    <DashboardShellInner>{children}</DashboardShellInner>
+                </SpaceProvider>
             </AppLockProvider>
         </AssistantAttachmentProvider>
     );

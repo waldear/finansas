@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useFinance } from './use-finance';
 import { useTransactions } from './use-transactions';
+import { useSpace } from '@/components/providers/space-provider';
 
 export type FinancialProfile = 'defensive' | 'balanced' | 'accelerated' | 'unknown';
 export type RiskLevel = 'low' | 'medium' | 'high';
@@ -48,11 +49,12 @@ function normalizeText(value: string): string {
 }
 
 export function useCopilot() {
+    const { activeSpaceId, isLoading: isLoadingSpaces } = useSpace();
     const { debts, savingsGoals, isLoadingGoals } = useFinance();
     const { transactions, isLoading: isLoadingTransactions } = useTransactions();
 
     const { data: obligations, isLoading: isLoadingObligations } = useQuery<Obligation[]>({
-        queryKey: ['obligations'],
+        queryKey: ['obligations', activeSpaceId],
         queryFn: async () => {
             const res = await fetch('/api/obligations', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
@@ -62,6 +64,7 @@ export function useCopilot() {
         },
         staleTime: 5 * 60 * 1000, // 5 minutes cache
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const calculateFinancialProfile = (): CopilotInsight => {
@@ -263,6 +266,6 @@ export function useCopilot() {
 
     return {
         insight: calculateFinancialProfile(),
-        isLoading: isLoadingTransactions || isLoadingGoals || isLoadingObligations
+        isLoading: isLoadingSpaces || !activeSpaceId || isLoadingTransactions || isLoadingGoals || isLoadingObligations
     };
 }

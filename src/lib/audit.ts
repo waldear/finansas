@@ -4,6 +4,7 @@ import { logWarn } from '@/lib/observability';
 interface AuditEventInput {
     supabase: SupabaseClient;
     userId: string;
+    spaceId?: string;
     entityType: string;
     entityId: string;
     action: 'create' | 'update' | 'delete' | 'system';
@@ -15,6 +16,7 @@ interface AuditEventInput {
 export async function recordAuditEvent({
     supabase,
     userId,
+    spaceId,
     entityType,
     entityId,
     action,
@@ -25,6 +27,7 @@ export async function recordAuditEvent({
     try {
         const { error } = await supabase.from('audit_events').insert({
             user_id: userId,
+            ...(spaceId ? { space_id: spaceId } : {}),
             entity_type: entityType,
             entity_id: entityId,
             action,
@@ -36,6 +39,7 @@ export async function recordAuditEvent({
         if (error) {
             logWarn('audit_event_insert_failed', {
                 userId,
+                spaceId: spaceId || null,
                 entityType,
                 entityId,
                 action,
@@ -45,6 +49,7 @@ export async function recordAuditEvent({
     } catch (error) {
         logWarn('audit_event_insert_exception', {
             userId,
+            spaceId: spaceId || null,
             entityType,
             entityId,
             action,

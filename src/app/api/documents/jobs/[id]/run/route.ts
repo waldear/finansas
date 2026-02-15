@@ -145,10 +145,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         }
 
         const documentType = VALID_DOCUMENT_TYPES.has(extractionData.type) ? extractionData.type : 'other';
+        const spaceId = job.space_id || user.id;
         const { data: docData, error: docError } = await supabase
             .from('documents')
             .insert({
                 user_id: user.id,
+                space_id: spaceId,
                 url: `documents://${job.file_path}`,
                 type: documentType,
                 status: 'processed',
@@ -257,6 +259,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
         await recordAuditEvent({
             supabase,
             userId: user.id,
+            spaceId,
             entityType: 'document_job',
             entityId: job.id,
             action: 'system',

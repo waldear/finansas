@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase-server';
 import { ObligationSchema } from '@/lib/schemas';
 import { recordAuditEvent } from '@/lib/audit';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 const ObligationUpdateSchema = ObligationSchema.omit({ id: true, user_id: true })
     .partial()
@@ -25,11 +26,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data: before, error: beforeError } = await supabase
             .from('obligations')
             .select('*')
             .eq('id', id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .single();
 
         if (beforeError || !before) {
@@ -43,7 +46,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             .from('obligations')
             .update(changes)
             .eq('id', id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .select()
             .single();
 
@@ -54,6 +57,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'obligation',
             entityId: updated.id,
             action: 'update',
@@ -97,11 +101,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data: before, error: beforeError } = await supabase
             .from('obligations')
             .select('*')
             .eq('id', id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .single();
 
         if (beforeError || !before) {
@@ -112,7 +118,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
             .from('obligations')
             .delete()
             .eq('id', id)
-            .eq('user_id', session.user.id);
+            .eq('space_id', activeSpaceId);
 
         if (deleteError) {
             return NextResponse.json({ error: deleteError.message || 'No se pudo eliminar la obligación.' }, { status: 500 });
@@ -121,6 +127,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'obligation',
             entityId: id,
             action: 'delete',
@@ -144,4 +151,3 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'No se pudo eliminar la obligación.' }, { status: 500 });
     }
 }
-

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useSpace } from '@/components/providers/space-provider';
 
 export interface AuditEvent {
     id: string;
@@ -10,8 +11,9 @@ export interface AuditEvent {
 }
 
 export function useAudit(limit = 50) {
+    const { activeSpaceId, isLoading: isLoadingSpaces, error: spacesError } = useSpace();
     const query = useQuery({
-        queryKey: ['audit', limit],
+        queryKey: ['audit', limit, activeSpaceId],
         queryFn: async () => {
             const response = await fetch(`/api/audit?limit=${limit}`, { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
@@ -20,11 +22,12 @@ export function useAudit(limit = 50) {
         },
         staleTime: 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     return {
         events: query.data || [],
-        isLoading: query.isLoading,
-        error: query.error,
+        isLoading: isLoadingSpaces || !activeSpaceId || query.isLoading,
+        error: spacesError || query.error,
     };
 }

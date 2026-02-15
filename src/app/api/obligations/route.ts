@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { ObligationSchema } from '@/lib/schemas';
 import { recordAuditEvent } from '@/lib/audit';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 export async function GET() {
     const context = createRequestContext('/api/obligations', 'GET');
@@ -17,11 +18,13 @@ export async function GET() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const today = new Date().toISOString().split('T')[0];
         const { error: overdueUpdateError } = await supabase
             .from('obligations')
             .update({ status: 'overdue' })
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .eq('status', 'pending')
             .lt('due_date', today);
 
@@ -36,7 +39,7 @@ export async function GET() {
         const { data, error } = await supabase
             .from('obligations')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .order('due_date', { ascending: true });
 
         if (error) {
@@ -73,6 +76,8 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json();
         const validated = ObligationSchema.parse({
             ...body,
@@ -84,6 +89,7 @@ export async function POST(req: Request) {
             .insert({
                 ...validated,
                 user_id: session.user.id,
+                space_id: activeSpaceId,
             })
             .select()
             .single();
@@ -95,6 +101,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'obligation',
             entityId: data.id,
             action: 'create',

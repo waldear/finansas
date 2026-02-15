@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Debt, DebtInput, DebtUpdate, SavingsGoal, SavingsGoalInput, SavingsGoalUpdate } from '@/lib/schemas';
 import { toast } from 'sonner';
+import { useSpace } from '@/components/providers/space-provider';
 
 type ConfirmDebtPaymentInput = {
     debtId: string;
@@ -21,9 +22,10 @@ type UpdateGoalInput = {
 
 export function useFinance() {
     const queryClient = useQueryClient();
+    const { activeSpaceId, isLoading: isLoadingSpaces, error: spacesError } = useSpace();
 
     const debtsQuery = useQuery({
-        queryKey: ['debts'],
+        queryKey: ['debts', activeSpaceId],
         queryFn: async () => {
             const res = await fetch('/api/debts', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
@@ -32,10 +34,11 @@ export function useFinance() {
         },
         staleTime: 5 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const goalsQuery = useQuery({
-        queryKey: ['savings'],
+        queryKey: ['savings', activeSpaceId],
         queryFn: async () => {
             const res = await fetch('/api/savings', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
@@ -44,6 +47,7 @@ export function useFinance() {
         },
         staleTime: 5 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const addDebt = useMutation({
@@ -205,11 +209,11 @@ export function useFinance() {
 
     return {
         debts: debtsQuery.data || [],
-        isLoadingDebts: debtsQuery.isLoading,
-        debtsError: debtsQuery.error instanceof Error ? debtsQuery.error.message : null,
+        isLoadingDebts: isLoadingSpaces || !activeSpaceId || debtsQuery.isLoading,
+        debtsError: spacesError || (debtsQuery.error instanceof Error ? debtsQuery.error.message : null),
         savingsGoals: goalsQuery.data || [],
-        isLoadingGoals: goalsQuery.isLoading,
-        goalsError: goalsQuery.error instanceof Error ? goalsQuery.error.message : null,
+        isLoadingGoals: isLoadingSpaces || !activeSpaceId || goalsQuery.isLoading,
+        goalsError: spacesError || (goalsQuery.error instanceof Error ? goalsQuery.error.message : null),
         addDebt: addDebt.mutateAsync,
         addGoal: addGoal.mutateAsync,
         updateDebt: updateDebt.mutateAsync,

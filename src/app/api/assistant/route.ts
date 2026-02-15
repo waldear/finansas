@@ -6,6 +6,7 @@ import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observab
 import { generateGeminiContentWithFallback } from '@/lib/gemini';
 import { recordAuditEvent } from '@/lib/audit';
 import { estimateTokenCount, recordAssistantUsageEvent, resolveAssistantEntitlement } from '@/lib/assistant-entitlements';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 type AssistantRequestPayload = {
     message?: string;
@@ -528,15 +529,17 @@ function parseDocumentEntriesForRegistration(message: string, extraction: any): 
 async function persistChatEvent(params: {
     supabase: SupabaseClient;
     userId: string;
+    spaceId: string;
     role: 'user' | 'assistant';
     content: string;
     actionsApplied?: AppliedAction[];
     documentContext?: AssistantDocumentContext | null;
 }) {
-    const { supabase, userId, role, content, actionsApplied = [], documentContext = null } = params;
+    const { supabase, userId, spaceId, role, content, actionsApplied = [], documentContext = null } = params;
     try {
         const { error } = await supabase.from('audit_events').insert({
             user_id: userId,
+            space_id: spaceId,
             entity_type: 'assistant_chat',
             entity_id: 'main',
             action: 'system',
@@ -654,10 +657,11 @@ async function convertUsdToArs(params: {
 async function applyDocumentQuickAction(params: {
     supabase: SupabaseClient;
     userId: string;
+    spaceId: string;
     message: string;
     documentContext: AssistantDocumentContext;
 }): Promise<AppliedAction[]> {
-    const { supabase, userId, message, documentContext } = params;
+    const { supabase, userId, spaceId, message, documentContext } = params;
     const extraction = (documentContext.extraction || {}) as any;
     const entries = parseDocumentEntriesForRegistration(message, extraction);
     if (!entries.length) return [];
@@ -670,6 +674,7 @@ async function applyDocumentQuickAction(params: {
 
     const insertPayload: Array<{
         user_id: string;
+        space_id: string;
         type: 'income' | 'expense';
         amount: number;
         category: string;
@@ -696,6 +701,7 @@ async function applyDocumentQuickAction(params: {
 
         insertPayload.push({
             user_id: userId,
+            space_id: spaceId,
             type: entry.type,
             amount: amountArs,
             category: entry.category,
@@ -725,6 +731,7 @@ async function applyDocumentQuickAction(params: {
     await recordAuditEvent({
         supabase,
         userId,
+        spaceId,
         entityType: 'transaction_batch',
         entityId: insertedRows[0].id,
         action: 'system',
@@ -762,9 +769,10 @@ async function applyDocumentQuickAction(params: {
 async function applyQuickAction(params: {
     supabase: SupabaseClient;
     userId: string;
+    spaceId: string;
     message: string;
 }): Promise<AppliedAction[]> {
-    const { supabase, userId, message } = params;
+    const { supabase, userId, spaceId, message } = params;
     const detectedAction = inferQuickAction(message);
     if (!detectedAction) return [] as AppliedAction[];
 
@@ -794,6 +802,7 @@ async function applyQuickAction(params: {
                 .from('transactions')
                 .insert({
                     user_id: userId,
+                    space_id: spaceId,
                     type: 'expense',
                     amount: Number(upfrontTotalArs.toFixed(2)),
                     category: 'Tarjeta',
@@ -810,6 +819,7 @@ async function applyQuickAction(params: {
             await recordAuditEvent({
                 supabase,
                 userId,
+                spaceId,
                 entityType: 'transaction',
                 entityId: transaction.id,
                 action: 'create',
@@ -839,6 +849,7 @@ async function applyQuickAction(params: {
                 .from('debts')
                 .insert({
                     user_id: userId,
+                    space_id: spaceId,
                     name: `${payload.plan_name} (cuotas pendientes)`,
                     total_amount: Number(totalFutureAmount.toFixed(2)),
                     monthly_payment: Number(payload.future_installment_amount_ars.toFixed(2)),
@@ -854,6 +865,7 @@ async function applyQuickAction(params: {
                 await recordAuditEvent({
                     supabase,
                     userId,
+                    spaceId,
                     entityType: 'debt',
                     entityId: debt.id,
                     action: 'create',
@@ -877,6 +889,7 @@ async function applyQuickAction(params: {
 
             const obligationsPayload = Array.from({ length: payload.future_installments }).map((_, index) => ({
                 user_id: userId,
+                space_id: spaceId,
                 title: `${payload.plan_name} - cuota ${index + 1}/${payload.future_installments}`,
                 amount: Number(payload.future_installment_amount_ars.toFixed(2)),
                 due_date: addMonthsIsoDate(payload.paid_date, index + 1),
@@ -938,6 +951,7 @@ async function applyQuickAction(params: {
                 category: detectedAction.payload.category,
                 date: detectedAction.payload.date,
                 user_id: userId,
+                space_id: spaceId,
             })
             .select()
             .single();
@@ -949,6 +963,7 @@ async function applyQuickAction(params: {
         await recordAuditEvent({
             supabase,
             userId,
+            spaceId,
             entityType: 'transaction',
             entityId: data.id,
             action: 'create',
@@ -971,6 +986,7 @@ async function applyQuickAction(params: {
         .insert({
             ...detectedAction.payload,
             user_id: userId,
+            space_id: spaceId,
         })
         .select()
         .single();
@@ -982,6 +998,7 @@ async function applyQuickAction(params: {
     await recordAuditEvent({
         supabase,
         userId,
+        spaceId,
         entityType: 'debt',
         entityId: data.id,
         action: 'create',
@@ -1036,6 +1053,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         userId = user.id;
+
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, user);
 
         const body = (await req.json().catch(() => ({}))) as AssistantRequestPayload;
         const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -1107,6 +1126,7 @@ export async function POST(req: Request) {
                 actionsApplied = await applyDocumentQuickAction({
                     supabase,
                     userId: user.id,
+                    spaceId: activeSpaceId,
                     message,
                     documentContext,
                 });
@@ -1122,6 +1142,7 @@ export async function POST(req: Request) {
                 actionsApplied = await applyQuickAction({
                     supabase,
                     userId: user.id,
+                    spaceId: activeSpaceId,
                     message,
                 });
             } catch (error) {
@@ -1136,6 +1157,7 @@ export async function POST(req: Request) {
         await persistChatEvent({
             supabase,
             userId: user.id,
+            spaceId: activeSpaceId,
             role: 'user',
             content: message,
             actionsApplied,
@@ -1154,33 +1176,33 @@ export async function POST(req: Request) {
             supabase
                 .from('transactions')
                 .select('type, amount, category, description, date')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .order('date', { ascending: false })
                 .limit(300),
             supabase
                 .from('debts')
                 .select('id, name, total_amount, monthly_payment, remaining_installments, total_installments, category, next_payment_date')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .order('next_payment_date', { ascending: true }),
             supabase
                 .from('savings_goals')
                 .select('id, name, target_amount, current_amount, deadline, category, is_completed')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .order('created_at', { ascending: false }),
             supabase
                 .from('obligations')
                 .select('id, title, amount, due_date, status, category, minimum_payment')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .order('due_date', { ascending: true }),
             supabase
                 .from('budgets')
                 .select('id, category, month, limit_amount, alert_threshold')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .eq('month', month),
             supabase
                 .from('recurring_transactions')
                 .select('id, type, amount, description, category, frequency, next_run, is_active')
-                .eq('user_id', user.id)
+                .eq('space_id', activeSpaceId)
                 .eq('is_active', true)
                 .order('next_run', { ascending: true }),
         ]);
@@ -1362,6 +1384,7 @@ ${message}
         await persistChatEvent({
             supabase,
             userId: user.id,
+            spaceId: activeSpaceId,
             role: 'assistant',
             content: text,
             actionsApplied,

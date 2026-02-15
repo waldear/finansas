@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 const MAX_IMPORT_ROWS = 2000;
 
@@ -124,6 +125,8 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json().catch(() => null);
         const source = typeof body?.source === 'string' && body.source.trim()
             ? body.source.trim().slice(0, 40)
@@ -155,6 +158,7 @@ export async function POST(req: Request) {
 
         const payload = parsedRows.map((row) => ({
             user_id: session.user.id,
+            space_id: activeSpaceId,
             ...row,
         }));
 
@@ -170,6 +174,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'transaction_import',
             entityId: String(Date.now()),
             action: 'system',

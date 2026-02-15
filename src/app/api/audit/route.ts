@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 export async function GET(req: Request) {
     const context = createRequestContext('/api/audit', 'GET');
@@ -13,6 +14,8 @@ export async function GET(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const url = new URL(req.url);
         const limit = Math.min(Number(url.searchParams.get('limit') || 200), 2000);
         const from = url.searchParams.get('from');
@@ -23,7 +26,7 @@ export async function GET(req: Request) {
         let query = supabase
             .from('audit_events')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .order('created_at', { ascending: false });
 
         if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {

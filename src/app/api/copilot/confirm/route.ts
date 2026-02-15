@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 const CopilotConfirmationSchema = z.object({
     title: z.string().min(1, 'El título es obligatorio'),
@@ -43,6 +44,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json();
         const validated = CopilotConfirmationSchema.parse(body);
 
@@ -53,6 +56,7 @@ export async function POST(req: Request) {
             .from('obligations')
             .insert({
                 user_id: session.user.id,
+                space_id: activeSpaceId,
                 extraction_id: validated.extraction_id ?? null,
                 title: validated.title,
                 amount: validated.amount,
@@ -86,6 +90,7 @@ export async function POST(req: Request) {
                 .from('debts')
                 .insert({
                     user_id: session.user.id,
+                    space_id: activeSpaceId,
                     name: validated.title,
                     total_amount: validated.amount,
                     monthly_payment: monthlyPayment > 0 ? monthlyPayment : validated.amount,
@@ -102,7 +107,7 @@ export async function POST(req: Request) {
                     .from('obligations')
                     .delete()
                     .eq('id', obligation.id)
-                    .eq('user_id', session.user.id);
+                    .eq('space_id', activeSpaceId);
 
                 return NextResponse.json({ error: debtError?.message || 'No se pudo crear la deuda.' }, { status: 500 });
             }
@@ -121,7 +126,7 @@ export async function POST(req: Request) {
                     .from('obligations')
                     .delete()
                     .eq('id', obligation.id)
-                    .eq('user_id', session.user.id);
+                    .eq('space_id', activeSpaceId);
 
                 return NextResponse.json({ error: 'Monto de pago inválido.' }, { status: 400 });
             }
@@ -130,6 +135,7 @@ export async function POST(req: Request) {
                 .from('transactions')
                 .insert({
                     user_id: session.user.id,
+                    space_id: activeSpaceId,
                     type: 'expense',
                     amount: paymentAmount,
                     description: paymentDescription,
@@ -145,14 +151,14 @@ export async function POST(req: Request) {
                         .from('debts')
                         .delete()
                         .eq('id', debt.id)
-                        .eq('user_id', session.user.id);
+                        .eq('space_id', activeSpaceId);
                 }
 
                 await supabase
                     .from('obligations')
                     .delete()
                     .eq('id', obligation.id)
-                    .eq('user_id', session.user.id);
+                    .eq('space_id', activeSpaceId);
 
                 return NextResponse.json(
                     { error: transactionError?.message || 'No se pudo registrar la transacción de pago.' },
@@ -174,7 +180,7 @@ export async function POST(req: Request) {
                 .from('obligations')
                 .update(updatePayload)
                 .eq('id', obligation.id)
-                .eq('user_id', session.user.id)
+                .eq('space_id', activeSpaceId)
                 .select()
                 .single();
 
@@ -184,21 +190,21 @@ export async function POST(req: Request) {
                     .from('transactions')
                     .delete()
                     .eq('id', createdTransaction.id)
-                    .eq('user_id', session.user.id);
+                    .eq('space_id', activeSpaceId);
 
                 if (debt?.id) {
                     await supabase
                         .from('debts')
                         .delete()
                         .eq('id', debt.id)
-                        .eq('user_id', session.user.id);
+                        .eq('space_id', activeSpaceId);
                 }
 
                 await supabase
                     .from('obligations')
                     .delete()
                     .eq('id', obligation.id)
-                    .eq('user_id', session.user.id);
+                    .eq('space_id', activeSpaceId);
 
                 return NextResponse.json(
                     { error: updateError?.message || 'No se pudo actualizar la obligación.' },
@@ -212,6 +218,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'obligation',
             entityId: obligation.id,
             action: 'create',
@@ -227,6 +234,7 @@ export async function POST(req: Request) {
             await recordAuditEvent({
                 supabase,
                 userId: session.user.id,
+                spaceId: activeSpaceId,
                 entityType: 'debt',
                 entityId: debt.id,
                 action: 'create',
@@ -242,6 +250,7 @@ export async function POST(req: Request) {
             await recordAuditEvent({
                 supabase,
                 userId: session.user.id,
+                spaceId: activeSpaceId,
                 entityType: 'transaction',
                 entityId: transaction.id,
                 action: 'create',
@@ -257,6 +266,7 @@ export async function POST(req: Request) {
                 await recordAuditEvent({
                     supabase,
                     userId: session.user.id,
+                    spaceId: activeSpaceId,
                     entityType: 'obligation',
                     entityId: obligation.id,
                     action: 'update',

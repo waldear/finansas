@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { BudgetInputSchema } from '@/lib/schemas';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 function getMonthRange(month: string) {
     const [year, monthPart] = month.split('-').map(Number);
@@ -36,13 +37,15 @@ export async function GET(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const month = new URL(req.url).searchParams.get('month') || currentMonth();
         const { startDate, endDate } = getMonthRange(month);
 
         const { data: budgets, error: budgetsError } = await supabase
             .from('budgets')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .eq('month', month)
             .order('category', { ascending: true });
 
@@ -61,7 +64,7 @@ export async function GET(req: Request) {
         const { data: transactions, error: txError } = await supabase
             .from('transactions')
             .select('category, amount, type, date')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .eq('type', 'expense')
             .gte('date', startDate)
             .lte('date', endDate);
@@ -115,6 +118,8 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const payload = await req.json();
         const validated = BudgetInputSchema.parse(payload);
 
@@ -123,8 +128,9 @@ export async function POST(req: Request) {
             .upsert({
                 ...validated,
                 user_id: session.user.id,
+                space_id: activeSpaceId,
             }, {
-                onConflict: 'user_id,category,month',
+                onConflict: 'space_id,category,month',
             })
             .select()
             .single();
@@ -142,6 +148,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'budget',
             entityId: data.id,
             action: 'create',

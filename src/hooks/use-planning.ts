@@ -8,6 +8,7 @@ import {
     RecurringTransactionInput,
     RecurringTransactionUpdate,
 } from '@/lib/schemas';
+import { useSpace } from '@/components/providers/space-provider';
 
 type UpdateBudgetInput = {
     budgetId: string;
@@ -26,9 +27,10 @@ function currentMonth() {
 
 export function usePlanning(month = currentMonth()) {
     const queryClient = useQueryClient();
+    const { activeSpaceId, isLoading: isLoadingSpaces, error: spacesError } = useSpace();
 
     const budgetsQuery = useQuery({
-        queryKey: ['budgets', month],
+        queryKey: ['budgets', month, activeSpaceId],
         queryFn: async () => {
             const response = await fetch(`/api/budgets?month=${month}`, { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
@@ -42,10 +44,11 @@ export function usePlanning(month = currentMonth()) {
         },
         staleTime: 2 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const recurringQuery = useQuery({
-        queryKey: ['recurring'],
+        queryKey: ['recurring', activeSpaceId],
         queryFn: async () => {
             const response = await fetch('/api/recurring', { credentials: 'include', cache: 'no-store' });
             const body = await response.json().catch(() => null);
@@ -54,6 +57,7 @@ export function usePlanning(month = currentMonth()) {
         },
         staleTime: 2 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const addBudget = useMutation({
@@ -210,10 +214,10 @@ export function usePlanning(month = currentMonth()) {
     return {
         budgets: budgetsQuery.data || [],
         recurringTransactions: recurringQuery.data || [],
-        isLoadingBudgets: budgetsQuery.isLoading,
-        isLoadingRecurring: recurringQuery.isLoading,
-        budgetsError: budgetsQuery.error instanceof Error ? budgetsQuery.error.message : null,
-        recurringError: recurringQuery.error instanceof Error ? recurringQuery.error.message : null,
+        isLoadingBudgets: isLoadingSpaces || !activeSpaceId || budgetsQuery.isLoading,
+        isLoadingRecurring: isLoadingSpaces || !activeSpaceId || recurringQuery.isLoading,
+        budgetsError: spacesError || (budgetsQuery.error instanceof Error ? budgetsQuery.error.message : null),
+        recurringError: spacesError || (recurringQuery.error instanceof Error ? recurringQuery.error.message : null),
         addBudget: addBudget.mutateAsync,
         addRecurring: addRecurring.mutateAsync,
         updateBudget: updateBudget.mutateAsync,

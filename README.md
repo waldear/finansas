@@ -41,6 +41,7 @@ npm install
    - `supabase-schema.sql`
    - `supabase-copilot.sql`
    - `supabase-advanced.sql`
+   - `supabase-spaces.sql`
 
 `supabase-advanced.sql` también crea la base para suscripciones Pro:
 - `user_entitlements`

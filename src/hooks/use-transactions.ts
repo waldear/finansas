@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Transaction, TransactionInput, TransactionUpdate } from '@/lib/schemas';
 import { toast } from 'sonner';
+import { useSpace } from '@/components/providers/space-provider';
 
 type UpdateTransactionInput = {
     id: string;
@@ -9,9 +10,10 @@ type UpdateTransactionInput = {
 
 export function useTransactions() {
     const queryClient = useQueryClient();
+    const { activeSpaceId, isLoading: isLoadingSpaces, error: spacesError } = useSpace();
 
     const transactionsQuery = useQuery({
-        queryKey: ['transactions'],
+        queryKey: ['transactions', activeSpaceId],
         queryFn: async () => {
             const res = await fetch('/api/transactions', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
@@ -20,6 +22,7 @@ export function useTransactions() {
         },
         staleTime: 5 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const addTransaction = useMutation({
@@ -88,8 +91,8 @@ export function useTransactions() {
 
     return {
         transactions: transactionsQuery.data || [],
-        isLoading: transactionsQuery.isLoading,
-        error: transactionsQuery.error instanceof Error ? transactionsQuery.error.message : null,
+        isLoading: isLoadingSpaces || !activeSpaceId || transactionsQuery.isLoading,
+        error: spacesError || (transactionsQuery.error instanceof Error ? transactionsQuery.error.message : null),
         addTransaction: addTransaction.mutate,
         addTransactionAsync: addTransaction.mutateAsync,
         isAdding: addTransaction.isPending,

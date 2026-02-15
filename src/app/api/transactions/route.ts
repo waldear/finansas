@@ -3,6 +3,7 @@ import { TransactionInputSchema } from '@/lib/schemas';
 import { NextResponse } from 'next/server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 export async function GET() {
     const context = createRequestContext('/api/transactions', 'GET');
@@ -14,10 +15,12 @@ export async function GET() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data, error } = await supabase
             .from('transactions')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .order('date', { ascending: false })
             // Tie-breaker so "Actividad Reciente" shows the newest record when multiple share the same date.
             .order('created_at', { ascending: false });
@@ -52,12 +55,14 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json();
         const validatedData = TransactionInputSchema.parse(body);
 
         const { data, error } = await supabase
             .from('transactions')
-            .insert([{ ...validatedData, user_id: session.user.id }])
+            .insert([{ ...validatedData, user_id: session.user.id, space_id: activeSpaceId }])
             .select()
             .single();
 
@@ -66,6 +71,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'transaction',
             entityId: data.id,
             action: 'create',

@@ -3,6 +3,7 @@ import { DebtInputSchema } from '@/lib/schemas';
 import { NextResponse } from 'next/server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 export async function GET() {
     const context = createRequestContext('/api/debts', 'GET');
@@ -14,10 +15,12 @@ export async function GET() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data, error } = await supabase
             .from('debts')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .order('next_payment_date', { ascending: true });
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -50,11 +53,13 @@ export async function POST(req: Request) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json();
         const validatedData = DebtInputSchema.parse(body);
         const { data, error } = await supabase
             .from('debts')
-            .insert([{ ...validatedData, user_id: session.user.id }])
+            .insert([{ ...validatedData, user_id: session.user.id, space_id: activeSpaceId }])
             .select()
             .single();
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -62,6 +67,7 @@ export async function POST(req: Request) {
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'debt',
             entityId: data.id,
             action: 'create',

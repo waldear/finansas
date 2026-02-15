@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 const BodySchema = z.object({
     payment_amount: z.coerce.number().positive().optional().nullable(),
@@ -30,6 +31,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json().catch(() => ({}));
         const validated = BodySchema.parse(body);
 
@@ -37,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .from('obligations')
             .select('*')
             .eq('id', id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .single();
 
         if (obligationError || !obligation) {
@@ -64,6 +67,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .from('transactions')
             .insert({
                 user_id: session.user.id,
+                space_id: activeSpaceId,
                 type: 'expense',
                 amount: paymentAmount,
                 description,
@@ -92,7 +96,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .from('obligations')
             .update(updatePayload)
             .eq('id', id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .select()
             .single();
 
@@ -102,7 +106,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 .from('transactions')
                 .delete()
                 .eq('id', transaction.id)
-                .eq('user_id', session.user.id);
+                .eq('space_id', activeSpaceId);
 
             return NextResponse.json({ error: updateError?.message || 'No se pudo actualizar la obligación.' }, { status: 500 });
         }
@@ -110,6 +114,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'transaction',
             entityId: transaction.id,
             action: 'create',
@@ -123,6 +128,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'obligation',
             entityId: updatedObligation.id,
             action: 'update',
@@ -158,4 +164,3 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'No se pudo confirmar el pago.' }, { status: 500 });
     }
 }
-

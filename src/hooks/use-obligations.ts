@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Obligation } from '@/lib/schemas';
 import { toast } from 'sonner';
+import { useSpace } from '@/components/providers/space-provider';
 
 type UpdateObligationInput = {
     id: string;
@@ -16,9 +17,10 @@ type ConfirmObligationPaymentInput = {
 
 export function useObligations() {
     const queryClient = useQueryClient();
+    const { activeSpaceId, isLoading: isLoadingSpaces, error: spacesError } = useSpace();
 
     const obligationsQuery = useQuery({
-        queryKey: ['obligations'],
+        queryKey: ['obligations', activeSpaceId],
         queryFn: async () => {
             const res = await fetch('/api/obligations', { credentials: 'include', cache: 'no-store' });
             const body = await res.json().catch(() => null);
@@ -27,6 +29,7 @@ export function useObligations() {
         },
         staleTime: 5 * 60 * 1000,
         refetchOnMount: 'always',
+        enabled: Boolean(activeSpaceId),
     });
 
     const updateObligation = useMutation({
@@ -101,8 +104,8 @@ export function useObligations() {
 
     return {
         obligations: obligationsQuery.data || [],
-        isLoadingObligations: obligationsQuery.isLoading,
-        obligationsError: obligationsQuery.error instanceof Error ? obligationsQuery.error.message : null,
+        isLoadingObligations: isLoadingSpaces || !activeSpaceId || obligationsQuery.isLoading,
+        obligationsError: spacesError || (obligationsQuery.error instanceof Error ? obligationsQuery.error.message : null),
         updateObligation: updateObligation.mutateAsync,
         deleteObligation: deleteObligation.mutateAsync,
         confirmObligationPayment: confirmObligationPayment.mutateAsync,
@@ -111,4 +114,3 @@ export function useObligations() {
         isConfirmingObligationPayment: confirmObligationPayment.isPending,
     };
 }
-

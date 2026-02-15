@@ -33,6 +33,7 @@ En Supabase -> SQL Editor, ejecutar en este orden:
 1. supabase-schema.sql
 2. supabase-copilot.sql
 3. supabase-advanced.sql
+4. supabase-spaces.sql
 
 5) Deploy (Vercel)
 Ver DEPLOY-VERCEL.md o README.md.

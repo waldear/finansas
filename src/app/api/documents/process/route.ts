@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { sanitizeEnv } from '@/lib/utils';
 import { ALLOWED_DOCUMENT_MIME_TYPES, extractFinancialDocument } from '@/lib/document-processing';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 function inferMimeTypeFromName(name: string) {
     const lowered = (name || '').toLowerCase();
@@ -57,6 +58,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, user);
+
         const safeOriginalName = file.name.replace(/[^\w.-]/g, '_');
         const filePath = `${user.id}/${Date.now()}-${safeOriginalName}`;
 
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
             .from('document_jobs')
             .insert({
                 user_id: user.id,
+                space_id: activeSpaceId,
                 file_path: filePath,
                 original_name: file.name,
                 mime_type: effectiveMimeType,

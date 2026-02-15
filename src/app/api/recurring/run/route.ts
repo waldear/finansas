@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { createRequestContext, logError, logInfo, logWarn } from '@/lib/observability';
 import { recordAuditEvent } from '@/lib/audit';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 function advanceDate(dateValue: string, frequency: 'weekly' | 'biweekly' | 'monthly') {
     const date = new Date(`${dateValue}T00:00:00.000Z`);
@@ -28,11 +29,13 @@ export async function POST() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const today = new Date().toISOString().slice(0, 10);
         const { data: dueRules, error: dueError } = await supabase
             .from('recurring_transactions')
             .select('*')
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .eq('is_active', true)
             .lte('next_run', today);
 
@@ -65,6 +68,7 @@ export async function POST() {
             for (let guard = 0; guard < 24 && nextRun <= today; guard++) {
                 transactionsToCreate.push({
                     user_id: session.user.id,
+                    space_id: activeSpaceId,
                     type: rule.type,
                     amount: rule.amount,
                     description: `${rule.description} (Recurrente)`,
@@ -94,12 +98,13 @@ export async function POST() {
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', update.id)
-                .eq('user_id', session.user.id);
+                .eq('space_id', activeSpaceId);
         }
 
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'recurring_runner',
             entityId: session.user.id,
             action: 'system',

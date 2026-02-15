@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase-server';
 import { TransactionUpdateSchema } from '@/lib/schemas';
 import { recordAuditEvent } from '@/lib/audit';
 import { createRequestContext, logError, logInfo } from '@/lib/observability';
+import { ensureActiveSpace } from '@/lib/spaces';
 
 const ParamsSchema = z.object({
     id: z.string().uuid('ID de transacción inválido'),
@@ -26,6 +27,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const body = await req.json();
         const validatedData = TransactionUpdateSchema.parse(body);
 
@@ -33,7 +36,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             .from('transactions')
             .select('*')
             .eq('id', parsedParams.data.id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .maybeSingle();
 
         if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
@@ -43,7 +46,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             .from('transactions')
             .update(validatedData)
             .eq('id', parsedParams.data.id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .select('*')
             .single();
 
@@ -52,6 +55,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'transaction',
             entityId: updatedTransaction.id,
             action: 'update',
@@ -94,11 +98,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const { activeSpaceId } = await ensureActiveSpace(supabase as any, session.user);
+
         const { data: existingTransaction, error: existingError } = await supabase
             .from('transactions')
             .select('*')
             .eq('id', parsedParams.data.id)
-            .eq('user_id', session.user.id)
+            .eq('space_id', activeSpaceId)
             .maybeSingle();
 
         if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
@@ -108,13 +114,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
             .from('transactions')
             .delete()
             .eq('id', parsedParams.data.id)
-            .eq('user_id', session.user.id);
+            .eq('space_id', activeSpaceId);
 
         if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
 
         await recordAuditEvent({
             supabase,
             userId: session.user.id,
+            spaceId: activeSpaceId,
             entityType: 'transaction',
             entityId: existingTransaction.id,
             action: 'delete',
