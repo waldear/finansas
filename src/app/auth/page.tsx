@@ -242,6 +242,10 @@ export default function AuthPage() {
             password,
             options: {
                 emailRedirectTo: buildCallbackUrl(),
+                data: {
+                    onboarding_completed: false,
+                    onboarding_version: 1,
+                },
             },
         });
 

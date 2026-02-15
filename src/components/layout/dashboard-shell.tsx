@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     BarChart3,
@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { applyTheme, AppTheme, getStoredTheme } from '@/lib/theme';
 import { AssistantAttachmentProvider } from '@/components/providers/assistant-attachment-provider';
+import { AppLockProvider } from '@/components/providers/app-lock-provider';
 import { FinFlowLogo } from '@/components/ui/finflow-logo';
 
 function AssistantBrainIcon({ className }: { className?: string }) {
@@ -47,9 +48,11 @@ const navItems = [
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const router = useRouter();
     const queryClient = useQueryClient();
     const [user, setUser] = useState<any>(null);
     const [theme, setTheme] = useState<AppTheme>('light');
+    const isOnboarding = pathname === '/dashboard/onboarding';
 
     useEffect(() => {
         const supabase = createClient();
@@ -62,6 +65,16 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 
         getUser();
     }, []);
+
+    useEffect(() => {
+        if (!user) return;
+        if (isOnboarding) return;
+
+        const onboardingCompleted = user?.user_metadata?.onboarding_completed;
+        if (onboardingCompleted === false) {
+            router.replace('/dashboard/onboarding');
+        }
+    }, [isOnboarding, router, user]);
 
     useEffect(() => {
         const storedTheme = getStoredTheme();
@@ -95,6 +108,14 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut();
         window.location.href = '/auth';
     };
+
+    if (isOnboarding) {
+        return (
+            <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+                <main className="min-h-screen">{children}</main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen overflow-x-hidden bg-background text-foreground pb-24 md:pb-0 md:pl-20 flex flex-col">
@@ -266,7 +287,9 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
     return (
         <AssistantAttachmentProvider>
-            <DashboardShellInner>{children}</DashboardShellInner>
+            <AppLockProvider>
+                <DashboardShellInner>{children}</DashboardShellInner>
+            </AppLockProvider>
         </AssistantAttachmentProvider>
     );
 }
