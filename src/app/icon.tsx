@@ -20,12 +20,33 @@ export default function Icon() {
                     background: 'radial-gradient(circle at 30% 25%, #F2FDFF 0%, #CFEAF5 55%, #A9CBDC 100%)',
                 }}
             >
+                <div
+                    style={{
+                        width: 420,
+                        height: 420,
+                        borderRadius: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 28px 50px rgba(11, 43, 58, 0.24), 0 10px 18px rgba(11, 43, 58, 0.18)',
+                    }}
+                >
                 <svg width="420" height="420" viewBox="0 0 120 120">
                     <defs>
                         <radialGradient id="bg" cx="30%" cy="25%" r="75%">
-                            <stop offset="0%" stopColor="#F2FDFF" stopOpacity="1" />
-                            <stop offset="55%" stopColor="#CFEAF5" stopOpacity="1" />
-                            <stop offset="100%" stopColor="#A9CBDC" stopOpacity="1" />
+                            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.92" />
+                            <stop offset="45%" stopColor="#CFEAF5" stopOpacity="0.82" />
+                            <stop offset="100%" stopColor="#A9CBDC" stopOpacity="0.92" />
+                        </radialGradient>
+                        <linearGradient id="rim" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
+                            <stop offset="35%" stopColor="#FFFFFF" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.55" />
+                        </linearGradient>
+                        <radialGradient id="glare" cx="30%" cy="25%" r="55%">
+                            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
+                            <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
                         </radialGradient>
                         <linearGradient id="wallet" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" stopColor="#22E0D3" />
@@ -51,12 +72,21 @@ export default function Icon() {
                     </defs>
 
                     <circle cx="60" cy="60" r="56" fill="url(#bg)" />
-                    <circle cx="60" cy="60" r="56" fill="none" stroke="#FFFFFF" strokeOpacity="0.55" strokeWidth="2" />
+                    <circle cx="60" cy="60" r="56" fill="none" stroke="url(#rim)" strokeWidth="2.25" />
+                    <circle cx="52" cy="48" r="34" fill="url(#glare)" opacity="0.9" />
                     <path
                         d="M22 46 C 30 22, 50 14, 72 18"
                         fill="none"
                         stroke="#FFFFFF"
                         strokeOpacity="0.45"
+                        strokeWidth="7"
+                        strokeLinecap="round"
+                    />
+                    <path
+                        d="M20 70 C 20 92, 34 102, 50 104"
+                        fill="none"
+                        stroke="#FFFFFF"
+                        strokeOpacity="0.18"
                         strokeWidth="7"
                         strokeLinecap="round"
                     />
@@ -100,6 +130,7 @@ export default function Icon() {
                     <circle cx="72.5" cy="72" r="4.2" fill="#E8FDFF" opacity="0.95" />
                     <circle cx="72.5" cy="72" r="2.0" fill="#0C6B73" opacity="0.40" />
                 </svg>
+                </div>
             </div>
         ),
         {
@@ -107,4 +138,3 @@ export default function Icon() {
         }
     );
 }
-
